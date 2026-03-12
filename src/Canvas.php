@@ -1,0 +1,149 @@
+<?php
+
+namespace JarredCain\CanvasLms;
+
+use JarredCain\CanvasLms\Auth\AuthManager;
+use JarredCain\CanvasLms\Auth\OAuth2\OAuth2Handler;
+use JarredCain\CanvasLms\Http\CanvasClient;
+use JarredCain\CanvasLms\Models\Account;
+use JarredCain\CanvasLms\Models\Assignment;
+use JarredCain\CanvasLms\Models\Course;
+use JarredCain\CanvasLms\Models\Enrollment;
+use JarredCain\CanvasLms\Models\Group;
+use JarredCain\CanvasLms\Models\Module;
+use JarredCain\CanvasLms\Models\Page;
+use JarredCain\CanvasLms\Models\Quiz;
+use JarredCain\CanvasLms\Models\Section;
+use JarredCain\CanvasLms\Models\Submission;
+use JarredCain\CanvasLms\Models\User;
+use JarredCain\CanvasLms\Query\Builder;
+
+class Canvas
+{
+    public function __construct(
+        private readonly CanvasClient $client,
+        private readonly AuthManager $auth,
+        private readonly ?OAuth2Handler $oauth2Handler = null
+    ) {
+    }
+
+    /**
+     * Return a new Canvas instance scoped to a specific OAuth2 storage key.
+     * Returns a new instance — does NOT mutate the singleton (safe for Octane).
+     */
+    public function actingAs(string $storageKey): static
+    {
+        $this->auth->setOAuthStorageKey($storageKey);
+        $token = $this->auth->getToken();
+
+        return new static(
+            $this->client->withToken($token),
+            $this->auth,
+            $this->oauth2Handler
+        );
+    }
+
+    public function oauth(): OAuth2Handler
+    {
+        if (!$this->oauth2Handler) {
+            throw new \RuntimeException(
+                'OAuth2 is not configured. Set CANVAS_AUTH_DRIVER=oauth2 and configure oauth2 credentials.'
+            );
+        }
+
+        return $this->oauth2Handler;
+    }
+
+    // -------------------------------------------------------------------------
+    // Top-level resource query builders
+    // -------------------------------------------------------------------------
+
+    public function accounts(): Builder
+    {
+        return $this->builderFor(Account::class);
+    }
+
+    public function users(): Builder
+    {
+        return $this->builderFor(User::class);
+    }
+
+    public function courses(): Builder
+    {
+        return $this->builderFor(Course::class);
+    }
+
+    public function groups(): Builder
+    {
+        return $this->builderFor(Group::class);
+    }
+
+    public function enrollments(): Builder
+    {
+        return $this->builderFor(Enrollment::class);
+    }
+
+    // -------------------------------------------------------------------------
+    // Lazy model factories for relationship traversal without API calls
+    // Canvas::course(42)->enrollments()->get()
+    // -------------------------------------------------------------------------
+
+    public function account(int|string $id): Account
+    {
+        return Account::newWithId($id);
+    }
+
+    public function user(int|string $id): User
+    {
+        return User::newWithId($id);
+    }
+
+    public function course(int|string $id): Course
+    {
+        return Course::newWithId($id);
+    }
+
+    public function group(int|string $id): Group
+    {
+        return Group::newWithId($id);
+    }
+
+    public function section(int|string $id): Section
+    {
+        return Section::newWithId($id);
+    }
+
+    public function assignment(int|string $id): Assignment
+    {
+        return Assignment::newWithId($id);
+    }
+
+    public function quiz(int|string $id): Quiz
+    {
+        return Quiz::newWithId($id);
+    }
+
+    public function module(int|string $id): Module
+    {
+        return Module::newWithId($id);
+    }
+
+    public function page(int|string $id): Page
+    {
+        return Page::newWithId($id);
+    }
+
+    public function submission(int|string $id): Submission
+    {
+        return Submission::newWithId($id);
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal
+    // -------------------------------------------------------------------------
+
+    private function builderFor(string $modelClass): Builder
+    {
+        return (new Builder($modelClass))->setClient($this->client);
+    }
+}

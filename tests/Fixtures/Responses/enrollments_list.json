@@ -1,0 +1,40 @@
+[
+    {
+        "id": "101",
+        "user_id": "5",
+        "course_id": "1",
+        "course_section_id": "10",
+        "type": "StudentEnrollment",
+        "role": "StudentEnrollment",
+        "role_id": "3",
+        "enrollment_state": "active",
+        "created_at": "2024-01-10T10:00:00Z",
+        "updated_at": "2024-01-10T10:00:00Z",
+        "grades": {
+            "html_url": "https://canvas.example.com/courses/1/grades/5",
+            "current_score": 87.5,
+            "final_score": 87.5,
+            "current_grade": "B+",
+            "final_grade": "B+"
+        }
+    },
+    {
+        "id": "102",
+        "user_id": "6",
+        "course_id": "1",
+        "course_section_id": "10",
+        "type": "StudentEnrollment",
+        "role": "StudentEnrollment",
+        "role_id": "3",
+        "enrollment_state": "active",
+        "created_at": "2024-01-10T11:00:00Z",
+        "updated_at": "2024-01-10T11:00:00Z",
+        "grades": {
+            "html_url": "https://canvas.example.com/courses/1/grades/6",
+            "current_score": 92.0,
+            "final_score": 92.0,
+            "current_grade": "A-",
+            "final_grade": "A-"
+        }
+    }
+]

@@ -1,0 +1,50 @@
+{
+    "name": "jarredcain/canvas-lms",
+    "description": "A Laravel package for integrating with the Canvas LMS REST API",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["laravel", "canvas", "lms", "canvas-lms", "instructure"],
+    "authors": [
+        {
+            "name": "Jarred Cain"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "illuminate/support": "^10.0|^11.0",
+        "illuminate/http": "^10.0|^11.0",
+        "illuminate/contracts": "^10.0|^11.0",
+        "illuminate/routing": "^10.0|^11.0",
+        "illuminate/database": "^10.0|^11.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^8.0|^9.0",
+        "mockery/mockery": "^1.6",
+        "phpunit/phpunit": "^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "JarredCain\\CanvasLms\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "JarredCain\\CanvasLms\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "JarredCain\\CanvasLms\\CanvasServiceProvider"
+            ],
+            "aliases": {
+                "Canvas": "JarredCain\\CanvasLms\\Facades\\Canvas"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

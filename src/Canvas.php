@@ -83,7 +83,7 @@ class Canvas
      *
      * @param int|string|null $accountId  Override the configured account ID
      */
-    public function accountCourses(int|string $accountId = null): Builder
+    public function accountCourses(int|string|null $accountId = null): Builder
     {
         $id = $accountId ?? config('canvas.account_id', 1);
         return $this->builderFor(Course::class)->forAccount($id);
@@ -115,7 +115,7 @@ class Canvas
      * @param string          $name       Subaccount name to search for
      * @param int|string|null $accountId  Root account to search under (defaults to canvas.account_id)
      */
-    public function findSubAccount(string $name, int|string $accountId = null): ?SubAccount
+    public function findSubAccount(string $name, int|string|null $accountId = null): ?SubAccount
     {
         $id = $accountId ?? config('canvas.account_id', 1);
 

@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \JarredCain\CanvasLms\Query\Builder accounts()
  * @method static \JarredCain\CanvasLms\Query\Builder users()
  * @method static \JarredCain\CanvasLms\Query\Builder courses()
- * @method static \JarredCain\CanvasLms\Query\Builder accountCourses(int|string $accountId = null)
+ * @method static \JarredCain\CanvasLms\Query\Builder accountCourses(int|string|null $accountId = null)
  * @method static \JarredCain\CanvasLms\Query\Builder subAccountCourses(int|string $subAccountId)
  * @method static \JarredCain\CanvasLms\Models\SubAccount|null findSubAccount(string $name, int|string $accountId = null)
  * @method static \JarredCain\CanvasLms\Query\Builder groups()

@@ -382,6 +382,96 @@ $progress->completion;   // 100
 
 ---
 
+## CSV Import
+
+The `CsvImporter` updates Canvas objects from a CSV file. Only the columns present in the CSV are sent to Canvas — rows don't need to contain every field.
+
+### Basic Usage
+
+```php
+use JarredCain\CanvasLms\Import\CsvImporter;
+use JarredCain\CanvasLms\Models\Course;
+
+$result = CsvImporter::for(Course::class)->import('/path/to/courses.csv');
+
+echo $result->total;     // total rows processed
+echo $result->succeeded; // successful updates
+echo $result->failed;    // failed rows
+
+foreach ($result->failed() as $row) {
+    echo "Row {$row->row} (ID: {$row->id}): {$row->error}";
+}
+```
+
+**CSV format** — the `id` column identifies which record to update. Any other columns are treated as fields to update:
+
+```csv
+id,name,course_code,time_zone
+42,Introduction to Biology,BIO101,America/New_York
+43,Advanced Chemistry,CHEM301,
+```
+
+Empty cells are skipped — row 43 above sends only `name` and `course_code` to Canvas (not `time_zone`).
+
+### Nested Resources
+
+For resources that require a parent context, provide a pre-configured builder:
+
+```php
+$result = CsvImporter::for(Assignment::class)
+    ->using(Assignment::query()->forCourse(42))
+    ->import('/path/to/assignments.csv');
+```
+
+### Column Mapping
+
+When CSV headers don't match Canvas field names:
+
+```php
+$result = CsvImporter::for(User::class)
+    ->mapColumns([
+        'Full Name'     => 'name',
+        'Email Address' => 'email',
+        'SIS ID'        => 'sis_user_id',
+    ])
+    ->import('/path/to/users.csv');
+```
+
+### Options
+
+| Method | Description |
+|---|---|
+| `idColumn(string)` | CSV column used as the record ID (default: `'id'`) |
+| `mapColumns(array)` | Map CSV headers to Canvas field names |
+| `wrap(string)` | Override the Canvas namespace key (e.g. `'course'`) |
+| `noWrap()` | Send fields flat — no resource namespace wrapper |
+| `skipEmpty(bool)` | Skip empty cells (default: `true`) |
+| `dryRun()` | Validate rows without making API calls |
+| `using(Builder)` | Provide a pre-configured builder for nested resources |
+
+### Dry Run
+
+```php
+$result = CsvImporter::for(Course::class)
+    ->dryRun()
+    ->import('/path/to/courses.csv');
+
+// Check which rows would fail (missing ID, no fields, etc.)
+foreach ($result->failed() as $row) {
+    echo "Row {$row->row}: {$row->error}";
+}
+```
+
+### Import from a String
+
+```php
+$csv = "id,name\n42,Biology 101\n43,Chemistry 201";
+
+$result = CsvImporter::for(Course::class)->importString($csv);
+```
+
+---
+
 ## Error Handling
 
 ```php

@@ -173,11 +173,11 @@ class CsvExporter
                     fn(string $col) => $this->headerMap[$col] ?? $col,
                     $columns
                 );
-                fputcsv($handle, $headers);
+                fputcsv($handle, $headers, ',', '"', '\\');
                 $headerWritten = true;
             }
 
-            fputcsv($handle, $this->extractValues($row, $columns));
+            fputcsv($handle, $this->extractValues($row, $columns), ',', '"', '\\');
         }
     }
 

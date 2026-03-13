@@ -91,6 +91,17 @@ abstract class CanvasModel
         return static::$endpoint;
     }
 
+    /**
+     * The URL segment used when this model is the PARENT in a HasMany relationship.
+     * Defaults to $endpoint. Override in models where the listing endpoint differs
+     * from the parent-context segment (e.g. SubAccount lists via 'sub_accounts'
+     * but parent-context routes via 'accounts').
+     */
+    public static function getRelationshipEndpoint(): string
+    {
+        return static::$endpoint;
+    }
+
     public static function requiresContext(): bool
     {
         return static::$requiresContext;

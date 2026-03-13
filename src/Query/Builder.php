@@ -90,6 +90,17 @@ class Builder
         return $this->pushContext('modules', $id);
     }
 
+    /**
+     * Scope to a Canvas subaccount.
+     * In Canvas, subaccounts are accounts — this is a named alias for forAccount()
+     * that makes subaccount intent explicit.
+     * Hits GET /api/v1/accounts/:subaccount_id/{resource}
+     */
+    public function forSubAccount(int|string $id): static
+    {
+        return $this->pushContext('accounts', $id);
+    }
+
     // -------------------------------------------------------------------------
     // Fluent filter methods
     // -------------------------------------------------------------------------

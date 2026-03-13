@@ -159,6 +159,10 @@ Canvas::accountCourses()->get();          // uses canvas.account_id from config
 Canvas::accountCourses(5)->get();         // explicit account
 Canvas::account(5)->courses()->get();     // via account chain
 
+// Scoped to a specific subaccount
+Canvas::subAccountCourses(12)->get();
+Canvas::subAccountCourses(12)->onlyPublished()->get();
+
 // Combine with filters
 Canvas::accountCourses()
     ->onlyPublished()
@@ -169,6 +173,8 @@ Canvas::accountCourses()
     ->perPage(50)
     ->get();
 ```
+
+In Canvas, subaccounts are accounts — `subAccountCourses(id)` is a named shortcut for `accountCourses(id)` that makes the intent clear when working with subaccount hierarchies. You can also use `forSubAccount(id)` directly on any builder.
 
 ### CRUD Operations
 
@@ -469,6 +475,84 @@ $csv = "id,name\n42,Biology 101\n43,Chemistry 201";
 
 $result = CsvImporter::for(Course::class)->importString($csv);
 ```
+
+### Export Import Results
+
+After an import, export the per-row result log as CSV:
+
+```php
+$result = CsvImporter::for(Course::class)->import('/path/to/courses.csv');
+
+// Get as string
+$csv = $result->toCsv();
+
+// Write to file
+$result->exportCsv('/path/to/import-log.csv');
+```
+
+Output columns: `row`, `id`, `success`, `error`
+
+---
+
+## CSV Export
+
+Export any Canvas model data to CSV.
+
+```php
+use JarredCain\CanvasLms\Export\CsvExporter;
+
+// From a collection (loads all into memory)
+$courses = Canvas::accountCourses()->all();
+$csv = CsvExporter::from($courses)->toString();
+
+// Stream all pages without loading into memory
+CsvExporter::fromBuilder(Canvas::accountCourses())
+    ->toFile('/path/to/courses.csv');
+```
+
+### Explicit Columns
+
+```php
+CsvExporter::from($courses)
+    ->columns(['id', 'name', 'course_code', 'workflow_state', 'start_at', 'end_at'])
+    ->toFile('/path/to/courses.csv');
+```
+
+If `columns()` is omitted, all attributes present on the first model are used.
+
+### Custom Header Labels
+
+```php
+CsvExporter::from($courses)
+    ->columns(['id', 'name', 'sis_course_id', 'workflow_state'])
+    ->mapHeaders([
+        'sis_course_id'  => 'SIS ID',
+        'workflow_state' => 'Status',
+    ])
+    ->toString();
+```
+
+### HTTP Download Response
+
+Stream directly to the browser from a Laravel controller:
+
+```php
+return CsvExporter::fromBuilder(Canvas::accountCourses()->onlyPublished())
+    ->columns(['id', 'name', 'course_code', 'total_students'])
+    ->toResponse('courses.csv');
+```
+
+### Export Options
+
+| Method | Description |
+|---|---|
+| `from(iterable)` | Export from a Collection, array, or LazyCollection |
+| `fromBuilder(Builder)` | Stream all pages via `lazy()` — memory-efficient |
+| `columns(array)` | Explicit list of attributes to include, in order |
+| `mapHeaders(array)` | Map attribute names to display column headers |
+| `toString()` | Return CSV as a string |
+| `toFile(string)` | Write CSV to a file path |
+| `toResponse(string)` | Return a `StreamedResponse` for HTTP download |
 
 ---
 

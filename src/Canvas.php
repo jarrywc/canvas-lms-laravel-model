@@ -7,6 +7,7 @@ use JarredCain\CanvasLms\Auth\OAuth2\OAuth2Handler;
 use JarredCain\CanvasLms\Http\CanvasClient;
 use JarredCain\CanvasLms\Models\Account;
 use JarredCain\CanvasLms\Models\Assignment;
+use JarredCain\CanvasLms\Models\SubAccount;
 use JarredCain\CanvasLms\Models\Course;
 use JarredCain\CanvasLms\Models\Enrollment;
 use JarredCain\CanvasLms\Models\Group;
@@ -86,6 +87,45 @@ class Canvas
     {
         $id = $accountId ?? config('canvas.account_id', 1);
         return $this->builderFor(Course::class)->forAccount($id);
+    }
+
+    /**
+     * List courses scoped to a specific subaccount.
+     * Hits GET /api/v1/accounts/:subaccount_id/courses.
+     *
+     * In Canvas, subaccounts are accounts — this is a named shortcut that
+     * makes the intent explicit when working with subaccount hierarchies.
+     *
+     * @param int|string $subAccountId  The Canvas subaccount ID
+     */
+    public function subAccountCourses(int|string $subAccountId): Builder
+    {
+        return $this->builderFor(Course::class)->forSubAccount($subAccountId);
+    }
+
+    /**
+     * Find a subaccount by name under the given account (defaults to root account).
+     * Makes one API call — searches GET /api/v1/accounts/:id/sub_accounts?search_term=name.
+     * Returns the first matching SubAccount, or null if not found.
+     *
+     * Usage:
+     *   $sub = Canvas::findSubAccount('Math Department');
+     *   Canvas::subAccountCourses($sub->id)->get();
+     *
+     * @param string          $name       Subaccount name to search for
+     * @param int|string|null $accountId  Root account to search under (defaults to canvas.account_id)
+     */
+    public function findSubAccount(string $name, int|string $accountId = null): ?SubAccount
+    {
+        $id = $accountId ?? config('canvas.account_id', 1);
+
+        /** @var SubAccount|null $result */
+        $result = $this->builderFor(SubAccount::class)
+            ->forAccount($id)
+            ->search($name)
+            ->first();
+
+        return $result;
     }
 
     public function groups(): Builder

@@ -42,4 +42,14 @@ class Account extends CanvasModel
     {
         return $this->hasMany(User::class);
     }
+
+    /**
+     * List subaccounts under this account.
+     * Hits GET /api/v1/accounts/:id/sub_accounts
+     * Supports search_term, recursive=true, per_page.
+     */
+    public function subAccounts(): HasMany
+    {
+        return $this->hasMany(SubAccount::class);
+    }
 }

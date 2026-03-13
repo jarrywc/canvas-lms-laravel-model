@@ -3,6 +3,7 @@
 namespace JarredCain\CanvasLms\Models;
 
 use Carbon\Carbon;
+use JarredCain\CanvasLms\Http\CanvasClient;
 use JarredCain\CanvasLms\Query\Builder;
 use JarredCain\CanvasLms\Relations\BelongsTo;
 use JarredCain\CanvasLms\Relations\HasMany;
@@ -136,6 +137,29 @@ abstract class CanvasModel
     protected function belongsTo(string $relatedClass, string $foreignKey): BelongsTo
     {
         return new BelongsTo($this, $relatedClass, $foreignKey);
+    }
+
+    /**
+     * Execute an API action that doesn't map to standard CRUD.
+     * Used by model lifecycle methods (publish, conclude, grade, etc.)
+     *
+     * @param string $method  HTTP method: 'get', 'post', 'put', 'delete'
+     * @param string $path    Full API path (e.g., 'api/v1/courses/42')
+     * @param array  $data    Request body (for POST/PUT)
+     * @param array  $query   Query string parameters (for GET/DELETE)
+     */
+    protected function performAction(string $method, string $path, array $data = [], array $query = []): array
+    {
+        $client = app(CanvasClient::class);
+
+        $response = match (strtolower($method)) {
+            'get'    => $client->get($path, $query),
+            'post'   => $client->post($path, $data),
+            'put'    => $client->put($path, $data),
+            'delete' => $client->delete($path . (!empty($query) ? '?' . http_build_query($query) : '')),
+        };
+
+        return $response->json();
     }
 
     private function castAttribute(mixed $value, string $cast): mixed

@@ -73,6 +73,21 @@ class Canvas
         return $this->builderFor(Course::class);
     }
 
+    /**
+     * List ALL courses for an account/organization.
+     * Hits GET /api/v1/accounts/:id/courses — returns org-wide results, not scoped to current user.
+     *
+     * Requires admin permissions on the account.
+     * Defaults to the account_id set in config/canvas.php.
+     *
+     * @param int|string|null $accountId  Override the configured account ID
+     */
+    public function accountCourses(int|string $accountId = null): Builder
+    {
+        $id = $accountId ?? config('canvas.account_id', 1);
+        return $this->builderFor(Course::class)->forAccount($id);
+    }
+
     public function groups(): Builder
     {
         return $this->builderFor(Group::class);

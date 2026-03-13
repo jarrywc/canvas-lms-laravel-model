@@ -21,6 +21,7 @@ use JarredCain\CanvasLms\Relations\BelongsTo;
  * @property string|null $sis_course_id
  * @property string|null $sis_section_id
  * @property string|null $sis_user_id
+ * @property string|null $sis_import_id
  * @property string|null $integration_id
  * @property int|null    $total_activity_time
  * @property \Carbon\Carbon|null $created_at
@@ -53,6 +54,10 @@ class Enrollment extends CanvasModel
         'last_attended_at'    => 'datetime',
     ];
 
+    // -------------------------------------------------------------------------
+    // Relationships
+    // -------------------------------------------------------------------------
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
@@ -66,5 +71,53 @@ class Enrollment extends CanvasModel
     public function section(): BelongsTo
     {
         return $this->belongsTo(Section::class, 'course_section_id');
+    }
+
+    // -------------------------------------------------------------------------
+    // Lifecycle action methods
+    // Canvas endpoint: DELETE /courses/:course_id/enrollments/:id?task=<action>
+    //                  PUT    /courses/:course_id/enrollments/:id/reactivate
+    // -------------------------------------------------------------------------
+
+    /**
+     * Conclude this enrollment — prevents future participation, but student stays on roster.
+     */
+    public function conclude(): static
+    {
+        return $this->runTask('conclude');
+    }
+
+    /**
+     * Deactivate this enrollment — user appears on roster but cannot participate.
+     */
+    public function deactivate(): static
+    {
+        return $this->runTask('deactivate');
+    }
+
+    /**
+     * Reactivate a previously deactivated or concluded enrollment.
+     */
+    public function reactivate(): static
+    {
+        $path = "api/v1/courses/{$this->course_id}/enrollments/{$this->id}/reactivate";
+        $data = $this->performAction('put', $path);
+        return $this->fill($data);
+    }
+
+    /**
+     * Permanently delete this enrollment.
+     */
+    public function delete(): bool
+    {
+        $this->runTask('delete');
+        return true;
+    }
+
+    private function runTask(string $task): static
+    {
+        $path = "api/v1/courses/{$this->course_id}/enrollments/{$this->id}";
+        $data = $this->performAction('delete', $path, [], ['task' => $task]);
+        return $this->fill($data);
     }
 }

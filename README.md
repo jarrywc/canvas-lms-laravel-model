@@ -149,6 +149,27 @@ Canvas::user(5)->enrollments()->get();
 Canvas::assignment(99)->submissions()->get();
 ```
 
+### Org-Wide Course Listing
+
+`Course::query()->get()` and `Canvas::courses()->get()` only return the **current user's enrolled courses** — this is a Canvas API scope restriction. To list all courses across the organization (admin required):
+
+```php
+// All three are equivalent — hit GET /api/v1/accounts/:id/courses
+Canvas::accountCourses()->get();          // uses canvas.account_id from config
+Canvas::accountCourses(5)->get();         // explicit account
+Canvas::account(5)->courses()->get();     // via account chain
+
+// Combine with filters
+Canvas::accountCourses()
+    ->onlyPublished()
+    ->forTerm(3)
+    ->withEnrollments()
+    ->byTeachers([101, 202])
+    ->include(['teachers', 'total_students'])
+    ->perPage(50)
+    ->get();
+```
+
 ### CRUD Operations
 
 ```php
@@ -212,14 +233,18 @@ All models provide typed property access via `@property` docblocks, and cast com
 | `User` | `users` | No |
 | `Course` | `courses` | No |
 | `Group` | `groups` | No |
+| `Progress` | `progress` | No |
 | `Enrollment` | `enrollments` | Yes — `forCourse()`, `forUser()`, or `forSection()` |
 | `Section` | `sections` | Yes — `forCourse()` |
 | `Assignment` | `assignments` | Yes — `forCourse()` |
+| `AssignmentGroup` | `assignment_groups` | Yes — `forCourse()` |
 | `Submission` | `submissions` | Yes — `forCourse()` + `forAssignment()` |
 | `Quiz` | `quizzes` | Yes — `forCourse()` |
 | `Module` | `modules` | Yes — `forCourse()` |
 | `ModuleItem` | `items` | Yes — `forCourse()` + `forModule()` |
 | `Page` | `pages` | Yes — `forCourse()` |
+| `GradingPeriod` | `grading_periods` | Yes — `forCourse()` |
+| `SubmissionComment` | _(value object)_ | Returned nested inside `Submission` |
 
 ### Nested Endpoints
 
@@ -240,6 +265,8 @@ Enrollment::query()->get(); // Canvas has no flat /enrollments endpoint
 ---
 
 ## Query Builder Reference
+
+### Core Methods
 
 | Method | Description |
 |---|---|
@@ -265,6 +292,93 @@ Enrollment::query()->get(); // Canvas has no flat /enrollments endpoint
 | `create(array)` | POST — create a resource |
 | `update(id, array)` | PUT — update a resource |
 | `delete(id)` | DELETE — delete a resource |
+
+### Course & Enrollment Filters
+
+| Method | Canvas Param | Notes |
+|---|---|---|
+| `onlyPublished()` | `published=true` | Account-scoped courses |
+| `onlyUnpublished()` | `published=false` | Account-scoped courses |
+| `withEnrollments(bool)` | `with_enrollments=` | Filter by enrollment presence |
+| `excludeBlueprints()` | `exclude_blueprint_courses=true` | |
+| `onlyBlueprints()` | `blueprint=true` | Account-scoped |
+| `forTerm(id)` | `enrollment_term_id=` | Both scopes |
+| `onlyHomeroom()` | `homeroom=true` | User-scoped only |
+| `startsBefore(date)` | `starts_before=ISO8601` | Account-scoped |
+| `endsAfter(date)` | `ends_after=ISO8601` | Account-scoped |
+| `byTeachers(array)` | `by_teachers[]=` | Account-scoped |
+| `byStudents(array)` | `by_students[]=` | Account-scoped |
+| `ofEnrollmentType(string\|array)` | `enrollment_type[]=` | User-scoped courses |
+| `ofState(string\|array)` | `state[]=` | Course workflow states |
+| `ofEnrollmentState(string\|array)` | `enrollment_state[]=` | User-scoped courses |
+
+---
+
+## Lifecycle Action Methods
+
+Canvas uses non-standard REST patterns for state changes — not separate endpoints but event/task parameters. The package models these as plain method calls on model instances.
+
+### Course Lifecycle
+
+```php
+$course = Course::find(42);
+
+$course->publish();    // Makes course visible to students
+$course->hide();       // Hides course from students (unpublish)
+$course->conclude();   // Locks course as read-only
+$course->restore();    // Restores a deleted course
+```
+
+### Enrollment Lifecycle
+
+```php
+$enrollment = $course->enrollments()->first();
+
+$enrollment->conclude();    // Mark as concluded
+$enrollment->deactivate();  // Deactivate (still visible, no access)
+$enrollment->reactivate();  // Re-activate a deactivated enrollment
+$enrollment->delete();      // Permanently delete — returns bool
+```
+
+### Submission Grading
+
+```php
+$submission = Canvas::course(42)->assignment(99)->submissions()->find($userId);
+
+$submission->grade(85);                        // numeric score
+$submission->grade('88%');                     // percentage
+$submission->grade('A', 'Great work!');        // with inline comment
+$submission->excuse();                         // mark excused
+$submission->addComment('Please resubmit.');   // comment only, no grade change
+$submission->gradeWithRubric([
+    '_criterion_id' => 3,
+    '_other_id'     => 5,
+]);
+```
+
+### Bulk Grading (Async)
+
+For grading many students at once, Canvas processes the request asynchronously and returns a `Progress` object.
+
+```php
+$progress = Canvas::course(42)->assignment(99)->bulkGrade([
+    101 => 85,
+    102 => 92,
+    103 => ['score' => 78, 'comment' => 'Late submission'],
+]);
+
+// Block until complete (polls every second, max 2 minutes)
+$progress->wait(120);
+
+// Or poll manually
+while ($progress->isPending()) {
+    sleep(2);
+    $progress->refresh();
+}
+
+$progress->isComplete(); // true
+$progress->completion;   // 100
+```
 
 ---
 

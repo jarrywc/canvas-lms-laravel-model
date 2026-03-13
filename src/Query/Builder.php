@@ -144,6 +144,129 @@ class Builder
     }
 
     // -------------------------------------------------------------------------
+    // Domain-specific filter shortcuts
+    // -------------------------------------------------------------------------
+
+    /** Filter to only published courses. Maps to ?published=true */
+    public function onlyPublished(): static
+    {
+        return $this->where('published', true);
+    }
+
+    /** Filter to only unpublished courses. Maps to ?published=false */
+    public function onlyUnpublished(): static
+    {
+        return $this->where('published', false);
+    }
+
+    /**
+     * Filter account-level courses by enrollment presence.
+     * true  = only courses that have at least one enrollment
+     * false = only courses with no enrollments
+     */
+    public function withEnrollments(bool $value = true): static
+    {
+        return $this->where('with_enrollments', $value);
+    }
+
+    /** Exclude blueprint courses from results. */
+    public function excludeBlueprints(): static
+    {
+        return $this->where('exclude_blueprint_courses', true);
+    }
+
+    /** Return only blueprint (template) courses. */
+    public function onlyBlueprints(): static
+    {
+        return $this->where('blueprint', true);
+    }
+
+    /** Filter by enrollment term ID. */
+    public function forTerm(int|string $termId): static
+    {
+        return $this->where('enrollment_term_id', $termId);
+    }
+
+    /** Return only homeroom courses (user-scoped course listing). */
+    public function onlyHomeroom(): static
+    {
+        return $this->where('homeroom', true);
+    }
+
+    /**
+     * Filter to courses starting before a given date (account-level courses).
+     * Accepts a DateTimeInterface or ISO 8601 string.
+     */
+    public function startsBefore(\DateTimeInterface|string $date): static
+    {
+        $value = $date instanceof \DateTimeInterface
+            ? $date->format(\DateTime::RFC3339)
+            : $date;
+
+        return $this->where('starts_before', $value);
+    }
+
+    /**
+     * Filter to courses ending after a given date (account-level courses).
+     * Accepts a DateTimeInterface or ISO 8601 string.
+     */
+    public function endsAfter(\DateTimeInterface|string $date): static
+    {
+        $value = $date instanceof \DateTimeInterface
+            ? $date->format(\DateTime::RFC3339)
+            : $date;
+
+        return $this->where('ends_after', $value);
+    }
+
+    /**
+     * Limit account-level courses to those taught by specific teachers.
+     * @param array $userIds  Canvas user IDs of teachers
+     */
+    public function byTeachers(array $userIds): static
+    {
+        return $this->whereIn('by_teachers', $userIds);
+    }
+
+    /**
+     * Limit account-level courses to those associated with specific students.
+     * @param array $userIds  Canvas user IDs of students
+     */
+    public function byStudents(array $userIds): static
+    {
+        return $this->whereIn('by_students', $userIds);
+    }
+
+    /**
+     * Filter by enrollment type(s).
+     * Valid values: teacher, student, ta, observer, designer
+     */
+    public function ofEnrollmentType(string|array $types): static
+    {
+        return $this->whereIn('enrollment_type', (array) $types);
+    }
+
+    /**
+     * Filter by course workflow state(s).
+     * Valid values: unpublished, available, completed, deleted
+     */
+    public function ofState(string|array $states): static
+    {
+        return $this->whereIn('state', (array) $states);
+    }
+
+    /**
+     * Filter by enrollment state(s).
+     * Valid values: active, invited_or_pending, completed
+     * Synthetic states: current_and_invited, current_and_future,
+     *                   current_future_and_restricted, current_and_concluded
+     */
+    public function ofEnrollmentState(string|array $states): static
+    {
+        return $this->whereIn('enrollment_state', (array) $states);
+    }
+
+    // -------------------------------------------------------------------------
     // Execution methods
     // -------------------------------------------------------------------------
 

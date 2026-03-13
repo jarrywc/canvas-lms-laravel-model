@@ -59,6 +59,10 @@ class Submission extends CanvasModel
         'posted_at'                        => 'datetime',
     ];
 
+    // -------------------------------------------------------------------------
+    // Relationships
+    // -------------------------------------------------------------------------
+
     public function assignment(): BelongsTo
     {
         return $this->belongsTo(Assignment::class, 'assignment_id');
@@ -72,5 +76,73 @@ class Submission extends CanvasModel
     public function course(): BelongsTo
     {
         return $this->belongsTo(Course::class, 'course_id');
+    }
+
+    // -------------------------------------------------------------------------
+    // Grading action methods
+    // Canvas endpoint: PUT /courses/:course_id/assignments/:assignment_id/submissions/:user_id
+    // -------------------------------------------------------------------------
+
+    /**
+     * Grade this submission.
+     *
+     * @param int|float|string $score  Points, percentage ("85%"), letter grade, or pass/fail
+     * @param string|null      $comment  Optional inline comment for the student
+     */
+    public function grade(int|float|string $score, ?string $comment = null): static
+    {
+        $body = ['submission' => ['posted_grade' => $score]];
+
+        if ($comment !== null) {
+            $body['comment'] = ['text_comment' => $comment];
+        }
+
+        $data = $this->performAction('put', $this->submissionPath(), $body);
+        return $this->fill($data);
+    }
+
+    /**
+     * Mark this submission as excused.
+     */
+    public function excuse(): static
+    {
+        $data = $this->performAction('put', $this->submissionPath(), [
+            'submission' => ['excuse' => true],
+        ]);
+        return $this->fill($data);
+    }
+
+    /**
+     * Add a text comment to this submission without changing the grade.
+     */
+    public function addComment(string $text): static
+    {
+        $data = $this->performAction('put', $this->submissionPath(), [
+            'comment' => ['text_comment' => $text],
+        ]);
+        return $this->fill($data);
+    }
+
+    /**
+     * Grade using a rubric. Provide an array of [criterion_id => points] pairs.
+     *
+     * @param array $criteria  e.g., ['_1234' => 3, '_5678' => 5]
+     */
+    public function gradeWithRubric(array $criteria): static
+    {
+        $rubricAssessment = [];
+        foreach ($criteria as $criterionId => $points) {
+            $rubricAssessment[$criterionId] = ['points' => $points];
+        }
+
+        $data = $this->performAction('put', $this->submissionPath(), [
+            'rubric_assessment' => $rubricAssessment,
+        ]);
+        return $this->fill($data);
+    }
+
+    private function submissionPath(): string
+    {
+        return "api/v1/courses/{$this->course_id}/assignments/{$this->assignment_id}/submissions/{$this->user_id}";
     }
 }

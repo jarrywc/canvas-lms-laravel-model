@@ -59,6 +59,10 @@ class Assignment extends CanvasModel
         'updated_at'          => 'datetime',
     ];
 
+    // -------------------------------------------------------------------------
+    // Relationships
+    // -------------------------------------------------------------------------
+
     public function course(): BelongsTo
     {
         return $this->belongsTo(Course::class, 'course_id');
@@ -67,5 +71,44 @@ class Assignment extends CanvasModel
     public function submissions(): HasMany
     {
         return $this->hasMany(Submission::class);
+    }
+
+    // -------------------------------------------------------------------------
+    // Bulk grading — async Canvas operation returning a Progress object
+    // Canvas endpoint: POST /courses/:course_id/assignments/:id/submissions/update_grades
+    // -------------------------------------------------------------------------
+
+    /**
+     * Grade multiple student submissions in bulk. Returns a Progress model for polling.
+     *
+     * @param array $grades  Keyed by user_id. Values can be a scalar grade or an array
+     *                       with 'score' and optional 'comment' keys.
+     *                       Examples:
+     *                         [101 => 85, 102 => 92]
+     *                         [101 => ['score' => 85, 'comment' => 'Late submission']]
+     *                         [101 => '88%', 102 => 'A']
+     *
+     * @return Progress  Poll this to track completion: $progress->wait(120)
+     */
+    public function bulkGrade(array $grades): Progress
+    {
+        $gradeData = [];
+
+        foreach ($grades as $userId => $value) {
+            if (is_array($value)) {
+                $entry = ['posted_grade' => $value['score'] ?? $value['posted_grade'] ?? null];
+                if (isset($value['comment'])) {
+                    $entry['text_comment'] = $value['comment'];
+                }
+                $gradeData[$userId] = $entry;
+            } else {
+                $gradeData[$userId] = ['posted_grade' => $value];
+            }
+        }
+
+        $path = "api/v1/courses/{$this->course_id}/assignments/{$this->id}/submissions/update_grades";
+        $data = $this->performAction('post', $path, ['grade_data' => $gradeData]);
+
+        return (new Progress())->fill($data);
     }
 }

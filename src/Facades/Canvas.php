@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \JarredCain\CanvasLms\Models\Module module(int|string $id)
  * @method static \JarredCain\CanvasLms\Models\Page page(int|string $id)
  * @method static \JarredCain\CanvasLms\Models\Submission submission(int|string $id)
+ * @method static \JarredCain\CanvasLms\Sis\SisImporter sisImport(int|string|null $accountId = null)
  *
  * @see \JarredCain\CanvasLms\Canvas
  */

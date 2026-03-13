@@ -18,6 +18,7 @@ use JarredCain\CanvasLms\Models\Section;
 use JarredCain\CanvasLms\Models\Submission;
 use JarredCain\CanvasLms\Models\User;
 use JarredCain\CanvasLms\Query\Builder;
+use JarredCain\CanvasLms\Sis\SisImporter;
 
 class Canvas
 {
@@ -191,6 +192,25 @@ class Canvas
     public function submission(int|string $id): Submission
     {
         return Submission::newWithId($id);
+    }
+
+    // -------------------------------------------------------------------------
+    // SIS Import
+    // -------------------------------------------------------------------------
+
+    /**
+     * Return a SisImporter scoped to the given account (defaults to canvas.account_id).
+     *
+     * Usage:
+     *   Canvas::sisImport()->fromFile('/tmp/users.csv')->submit()->wait();
+     *   Canvas::sisImport(5)->fromFile('/tmp/enrollments.csv')->batchMode(3)->submit();
+     *
+     * @param int|string|null $accountId  Override the configured account ID
+     */
+    public function sisImport(int|string|null $accountId = null): SisImporter
+    {
+        $id = $accountId ?? config('canvas.account_id', 1);
+        return new SisImporter($this->client, $id);
     }
 
     // -------------------------------------------------------------------------

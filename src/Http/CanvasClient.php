@@ -56,6 +56,30 @@ class CanvasClient
         return $this->send('delete', $url);
     }
 
+    /**
+     * POST a multipart/form-data request (used for SIS imports and file uploads).
+     *
+     * @param array $fields       Scalar form fields
+     * @param array $attachments  Each entry: ['name'=>, 'contents'=>, 'filename'=>, 'mimeType'=>]
+     */
+    public function postMultipart(string $path, array $fields = [], array $attachments = []): Response
+    {
+        $url     = $this->resolveUrl($path);
+        $pending = Http::withToken($this->token)->acceptJson();
+
+        foreach ($attachments as $attachment) {
+            $pending = $pending->attach(
+                $attachment['name'],
+                $attachment['contents'],
+                $attachment['filename'],
+            );
+        }
+
+        $httpResponse = $pending->post($url, $fields);
+
+        return $this->handleResponse($httpResponse);
+    }
+
     private function send(string $method, string $url, array $options = []): Response
     {
         $pending = $this->buildRequest();
@@ -67,8 +91,11 @@ class CanvasClient
             'delete' => $pending->delete($url),
         };
 
-        $response = new Response($httpResponse);
+        return $this->handleResponse($httpResponse);
+    }
 
+    private function handleResponse(\Illuminate\Http\Client\Response $httpResponse): Response
+    {
         if ($httpResponse->status() === 429 ||
             ($httpResponse->status() === 403 && $this->isRateLimitResponse($httpResponse))) {
             $retryAfter = (int) ($httpResponse->header('Retry-After') ?: 60);
@@ -85,7 +112,7 @@ class CanvasClient
             );
         }
 
-        return $response;
+        return new Response($httpResponse);
     }
 
     private function buildRequest(): PendingRequest

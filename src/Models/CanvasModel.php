@@ -91,6 +91,11 @@ abstract class CanvasModel
         return json_encode($this->toArray(), $flags);
     }
 
+    public function toString(int $flags = 0): string
+    {
+        return $this->toJson($flags);
+    }
+
     public function __toString(): string
     {
         return $this->toJson();

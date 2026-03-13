@@ -86,6 +86,16 @@ abstract class CanvasModel
         return $this->attributes;
     }
 
+    public function toJson(int $flags = 0): string
+    {
+        return json_encode($this->toArray(), $flags);
+    }
+
+    public function __toString(): string
+    {
+        return $this->toJson();
+    }
+
     public static function getEndpoint(): string
     {
         return static::$endpoint;

@@ -1,0 +1,9 @@
+{
+  "id": 42,
+  "name": "Jane Doe",
+  "sortable_name": "Doe, Jane",
+  "login_id": "jane.doe",
+  "email": "jane.doe@example.com",
+  "sis_user_id": "sis_jane",
+  "created_at": "2023-01-15T10:00:00Z"
+}

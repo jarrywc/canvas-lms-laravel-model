@@ -48,4 +48,27 @@ class User extends CanvasModel
     {
         return $this->hasMany(Group::class);
     }
+
+    // -------------------------------------------------------------------------
+    // Account status actions
+    // Canvas endpoint: PUT /api/v1/users/:id  { user: { event: suspend|unsuspend } }
+    // -------------------------------------------------------------------------
+
+    /**
+     * Suspend this user — disables all logins while preserving enrollments.
+     */
+    public function suspend(): static
+    {
+        $data = $this->performAction('put', "api/v1/users/{$this->id}", ['user' => ['event' => 'suspend']]);
+        return $this->fill($data);
+    }
+
+    /**
+     * Unsuspend (re-activate) this user's logins.
+     */
+    public function unsuspend(): static
+    {
+        $data = $this->performAction('put', "api/v1/users/{$this->id}", ['user' => ['event' => 'unsuspend']]);
+        return $this->fill($data);
+    }
 }

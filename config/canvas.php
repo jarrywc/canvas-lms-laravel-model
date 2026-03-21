@@ -52,6 +52,74 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Cross-System Field Adapter Mappings
+    |--------------------------------------------------------------------------
+    |
+    | Define named field-mapping templates for bidirectional translation between
+    | Canvas and other systems (Salesforce, SQL databases, custom APIs, etc.).
+    |
+    | Each key is a resource type name (e.g. 'user', 'course'). The value is
+    | an array of field rows, where each row describes one logical field across
+    | all connected systems.
+    |
+    | Row keys:
+    |   - Any system name (string) => the field name in that system
+    |   - 'priority' (array)       => ordered system names; first system with a
+    |                                  value wins on conflict in merge(). Omit to
+    |                                  fall back to the priority passed to merge().
+    |   - 'transforms' (array)     => direction-keyed callables:
+    |                                    'to_{system}'   — applied when projecting outbound
+    |                                    'from_{system}' — applied when ingesting in merge()
+    |
+    | Load a named mapper:
+    |   ResourceMapper::fromConfig('user')
+    |
+    | Two-way translation:
+    |   $mapper->from('salesforce', $data)->to('canvas');
+    |
+    | Three-way merge with per-field priority:
+    |   $mapper->merge(['canvas' => $a, 'salesforce' => $b, 'sql' => $c]);
+    |   $record->for('canvas');
+    |
+    | Push external mutations into Canvas:
+    |   app(AdapterService::class)->push('user', $id, 'salesforce', $payload);
+    |
+    | Enable HTTP mutation endpoint (POST /canvas/adapter/{resource}/{id}):
+    |   Set 'routes_enabled' => true and publish the controller stub:
+    |   php artisan vendor:publish --tag=canvas-adapter
+    |
+    */
+
+    'adapters' => [
+
+        'routes_enabled' => false,
+
+        // Example: user mapping between Canvas, Salesforce, and a SQL database.
+        // Uncomment and customise to match your actual field names.
+        //
+        // 'user' => [
+        //     ['canvas' => 'name',       'salesforce' => 'Full_Name__c',  'sql' => 'full_name',
+        //      'priority' => ['canvas', 'salesforce', 'sql']],
+        //     ['canvas' => 'email',      'salesforce' => 'Email',          'sql' => 'email_address'],
+        //     ['canvas' => 'sis_user_id','salesforce' => 'Student_ID__c',  'sql' => 'student_id'],
+        // ],
+        //
+        // Example: course mapping where Salesforce owns start/end dates.
+        //
+        // 'course' => [
+        //     ['canvas' => 'name',     'salesforce' => 'Course_Name__c',
+        //      'priority' => ['canvas']],
+        //     ['canvas' => 'start_at', 'salesforce' => 'Start_Date__c',
+        //      'priority' => ['salesforce', 'canvas'],
+        //      'transforms' => ['to_salesforce' => fn($v) => date('Y-m-d', strtotime($v))]],
+        //     ['canvas' => 'end_at',   'salesforce' => 'End_Date__c',
+        //      'priority' => ['salesforce', 'canvas']],
+        // ],
+
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | OAuth2 Configuration
     |--------------------------------------------------------------------------
     |

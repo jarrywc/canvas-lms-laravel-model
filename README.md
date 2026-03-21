@@ -850,6 +850,219 @@ Canvas::userEmailLookup(accountId: 5)->fromEmails([...])->lookup();
 
 ---
 
+## Cross-System Field Adapter
+
+`ResourceMapper` provides bidirectional field translation between Canvas and any number of external systems (Salesforce, SQL databases, custom APIs, etc.). Define a mapping once and use it to translate data in either direction, or merge data from three or more systems with **per-field** conflict resolution.
+
+This is designed for integration scenarios such as observer-driven cyclic sync — where Canvas changes propagate to Salesforce and Salesforce changes propagate back to Canvas, with each field knowing which system is its source of truth.
+
+### Defining a Mapper
+
+Each row in the definition array describes one logical field across all connected systems. Reserved keys per row:
+- **System names** (e.g. `'canvas'`, `'salesforce'`, `'sql'`) — map to the field name in that system
+- **`'priority'`** — ordered system names; first system with a value wins on conflict in `merge()`. Omit to fall back to the global priority passed to `merge()`.
+- **`'transforms'`** — direction-keyed callables: `to_{system}` (outbound) and `from_{system}` (inbound during merge)
+
+```php
+use JarredCain\CanvasLms\Adapters\ResourceMapper;
+
+$mapper = ResourceMapper::define([
+    // Canvas is the source of truth for 'name'
+    ['canvas' => 'name',     'salesforce' => 'Full_Name__c',  'sql' => 'full_name',
+     'priority' => ['canvas', 'salesforce', 'sql']],
+
+    // Salesforce is the source of truth for dates
+    ['canvas' => 'start_at', 'salesforce' => 'Start_Date__c', 'sql' => 'start_date',
+     'priority' => ['salesforce', 'canvas', 'sql'],
+     'transforms' => ['to_salesforce' => fn($v) => date('Y-m-d', strtotime($v))]],
+
+    // No priority — falls back to whatever is passed to merge()
+    ['canvas' => 'sis_user_id', 'salesforce' => 'Student_ID__c', 'sql' => 'student_id'],
+]);
+```
+
+### Two-Way Translation
+
+```php
+// Canvas → Salesforce
+$sfPayload = $mapper->from('canvas', $canvasUser->toArray())->to('salesforce');
+// ['Full_Name__c' => 'Ada Lovelace', 'Start_Date__c' => '2026-09-01', ...]
+
+// Salesforce → Canvas
+$canvasFields = $mapper->from('salesforce', $sfRecord)->to('canvas');
+// ['name' => 'Ada Lovelace', 'start_at' => '2026-09-01', ...]
+```
+
+Fields absent from the input are silently skipped — partial payloads are safe.
+
+### Three-Way Merge
+
+`merge()` combines data from multiple systems into a single record. Each field resolves independently using its own priority list. Call `for()` on the result to project into any system's field names.
+
+```php
+$record = $mapper->merge([
+    'canvas'      => $canvasData,
+    'salesforce'  => $sfData,
+    'sql'         => $sqlRow,
+]);
+
+// Each system gets a view based on per-field priority
+$record->for('canvas');      // ['name' => 'Ada', 'start_at' => '...', ...]
+$record->for('salesforce');  // ['Full_Name__c' => 'Ada', 'Start_Date__c' => '...', ...]
+$record->for('sql');         // ['full_name' => 'Ada', 'start_date' => '...', ...]
+```
+
+The global `priority` parameter to `merge()` serves as a fallback for fields that don't define their own:
+
+```php
+$record = $mapper->merge($sources, priority: ['canvas', 'salesforce', 'sql']);
+```
+
+### Loading from Config
+
+Define named mapping templates in `config/canvas.php` under the `adapters` key and load them by name:
+
+```php
+// config/canvas.php
+'adapters' => [
+    'user' => [
+        ['canvas' => 'name',       'salesforce' => 'Full_Name__c',  'priority' => ['canvas']],
+        ['canvas' => 'email',      'salesforce' => 'Email'],
+        ['canvas' => 'sis_user_id','salesforce' => 'Student_ID__c'],
+    ],
+    'course' => [
+        ['canvas' => 'name',     'salesforce' => 'Course_Name__c',  'priority' => ['canvas']],
+        ['canvas' => 'start_at', 'salesforce' => 'Start_Date__c',   'priority' => ['salesforce', 'canvas']],
+        ['canvas' => 'end_at',   'salesforce' => 'End_Date__c',     'priority' => ['salesforce', 'canvas']],
+    ],
+],
+```
+
+```php
+$mapper = ResourceMapper::fromConfig('user');
+$sfPayload = $mapper->from('canvas', $user->toArray())->to('salesforce');
+```
+
+### Transforms
+
+Transforms are callables defined per-field in the `transforms` array. They run automatically during translation and merging:
+
+```php
+['canvas' => 'start_at', 'salesforce' => 'Start_Date__c',
+ 'transforms' => [
+     'to_salesforce'   => fn($v) => date('Y-m-d', strtotime($v)),     // outbound to SF
+     'from_salesforce' => fn($v) => Carbon::parse($v)->toIso8601String(), // inbound from SF
+ ]],
+```
+
+| Key | Applied when |
+|---|---|
+| `to_{system}` | Translating outbound (`->to()`) or projecting from a merge (`->for()`) |
+| `from_{system}` | Ingesting during `merge()` from that system |
+
+### Pushing Mutations into Canvas
+
+`AdapterService` wraps the mapper and Canvas API — translate an external payload and apply it to Canvas in one call:
+
+```php
+use JarredCain\CanvasLms\Adapters\AdapterService;
+
+// Translate Salesforce payload → Canvas field names → PUT /api/v1/users/42
+app(AdapterService::class)->push('user', 42, 'salesforce', [
+    'Full_Name__c' => 'Ada Lovelace',
+    'Email'        => 'ada@university.edu',
+]);
+
+// Translate only — inspect before pushing
+$canvasPayload = app(AdapterService::class)->translate('course', 'salesforce', $sfRecord);
+```
+
+Supported resource types: `user`, `course`, `group`, `enrollment`, `account`. Extend `AdapterService` and override `builderForResource()` to add more.
+
+### Observer Pattern Example
+
+```php
+// In a Canvas course observer — Canvas owns 'name', Salesforce owns dates
+public function updated(Course $course): void
+{
+    $mapper = ResourceMapper::fromConfig('course');
+
+    // Only push fields where Canvas is the master
+    $sfPayload = $mapper->from('canvas', [
+        'name' => $course->name,
+    ])->to('salesforce');
+
+    Salesforce::updateRecord($course->sf_id, $sfPayload);
+}
+
+// In a Salesforce webhook controller — Salesforce owns start/end dates
+public function handleCourseUpdate(Request $request): void
+{
+    app(AdapterService::class)->push(
+        'course',
+        $request->canvas_course_id,
+        'salesforce',
+        $request->json()->all()
+    );
+}
+```
+
+### HTTP Mutation Endpoint (optional)
+
+Enable an HTTP endpoint for receiving external system payloads directly:
+
+```php
+// config/canvas.php
+'adapters' => [
+    'routes_enabled' => true,
+    // ...
+],
+```
+
+This registers `POST /canvas/adapter/{resource}/{id}`. The route uses `api` middleware by default.
+
+**Publish the controller stub** to customize authentication, validation, and error handling before enabling in production:
+
+```bash
+php artisan vendor:publish --tag=canvas-adapter
+```
+
+**Request format:**
+
+```http
+POST /canvas/adapter/user/42
+X-Canvas-Source-System: salesforce
+Content-Type: application/json
+
+{"Full_Name__c": "Ada Lovelace", "Email": "ada@university.edu"}
+```
+
+> The default controller has no authentication. Always publish and secure it before enabling in production.
+
+### `ResourceMapper` Reference
+
+| Method | Description |
+|---|---|
+| `ResourceMapper::define(array)` | Build a mapper from a plain array of field rows |
+| `ResourceMapper::fromConfig(string)` | Load a named mapper from `config('canvas.adapters.key')` |
+| `from(system, data)` | Begin a two-way translation — chain `->to(system)` to complete it |
+| `merge(sources, priority)` | Merge data from multiple systems; global priority is fallback for fields without their own |
+
+| Result method | Description |
+|---|---|
+| `PendingTranslation::to(system)` | Translate to the target system's field names; returns `array` |
+| `MappedRecord::for(system)` | Project merged record into the system's field names; returns `array` |
+| `MappedRecord::toArray()` | Raw canonical store (mapping index → value) |
+
+### `AdapterService` Reference
+
+| Method | Description |
+|---|---|
+| `translate(resource, fromSystem, data)` | Translate $data from $fromSystem to Canvas field names using the named config mapper |
+| `push(resource, canvasId, fromSystem, data)` | Translate and update the Canvas resource via the API; returns the updated model |
+
+---
+
 ## Error Handling
 
 ```php

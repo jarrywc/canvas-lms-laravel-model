@@ -3,6 +3,7 @@
 namespace JarredCain\CanvasLms;
 
 use Illuminate\Support\ServiceProvider;
+use JarredCain\CanvasLms\Adapters\AdapterService;
 use JarredCain\CanvasLms\Auth\AuthManager;
 use JarredCain\CanvasLms\Auth\OAuth2\OAuth2Handler;
 use JarredCain\CanvasLms\Auth\OAuth2\OAuthController;
@@ -10,6 +11,7 @@ use JarredCain\CanvasLms\Auth\Storage\CacheTokenStorage;
 use JarredCain\CanvasLms\Auth\Storage\DatabaseTokenStorage;
 use JarredCain\CanvasLms\Auth\Storage\TokenStorageInterface;
 use JarredCain\CanvasLms\Http\CanvasClient;
+use JarredCain\CanvasLms\Http\Controllers\AdapterController;
 
 class CanvasServiceProvider extends ServiceProvider
 {
@@ -70,6 +72,10 @@ class CanvasServiceProvider extends ServiceProvider
                 $oauth2Handler
             );
         });
+
+        $this->app->singleton(AdapterService::class, function ($app) {
+            return new AdapterService($app->make('canvas'));
+        });
     }
 
     public function boot(): void
@@ -83,9 +89,30 @@ class CanvasServiceProvider extends ServiceProvider
                 __DIR__ . '/../database/migrations/create_canvas_oauth_tokens_table.php'
                     => database_path('migrations/' . date('Y_m_d_His') . '_create_canvas_oauth_tokens_table.php'),
             ], 'canvas-migrations');
+
+            $this->publishes([
+                __DIR__ . '/Http/Controllers/AdapterController.php'
+                    => app_path('Http/Controllers/Canvas/AdapterController.php'),
+            ], 'canvas-adapter');
         }
 
         $this->registerOAuthRoutes();
+        $this->registerAdapterRoutes();
+    }
+
+    private function registerAdapterRoutes(): void
+    {
+        if (!config('canvas.adapters.routes_enabled', false)) {
+            return;
+        }
+
+        $this->app['router']->group([
+            'prefix'     => 'canvas/adapter',
+            'middleware' => ['api'],
+        ], function ($router) {
+            $router->post('{resource}/{id}', [AdapterController::class, 'mutate'])
+                ->name('canvas.adapter.mutate');
+        });
     }
 
     private function registerOAuthRoutes(): void

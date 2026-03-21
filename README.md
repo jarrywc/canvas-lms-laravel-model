@@ -346,6 +346,17 @@ $enrollment->reactivate();  // Re-activate a deactivated enrollment
 $enrollment->delete();      // Permanently delete — returns bool
 ```
 
+### User Account Status
+
+```php
+$user = User::find(42);
+
+$user->suspend();    // Disables all logins — enrollments and data are preserved
+$user->unsuspend();  // Re-enables logins
+```
+
+For bulk status changes driven by SIS IDs, use [`SisUserCsvBuilder`](#sis-import) instead.
+
 ### Submission Grading
 
 ```php
@@ -553,6 +564,160 @@ return CsvExporter::fromBuilder(Canvas::accountCourses()->onlyPublished())
 | `toString()` | Return CSV as a string |
 | `toFile(string)` | Write CSV to a file path |
 | `toResponse(string)` | Return a `StreamedResponse` for HTTP download |
+
+---
+
+## SIS Import
+
+Canvas's SIS import endpoint (`POST /api/v1/accounts/:id/sis_imports`) accepts CSV files conforming to the [Canvas SIS CSV format](https://community.instructure.com/en/kb/articles/661611-how-do-i-format-csv-text-files-for-uploading-sis-data-into-a-canvas-account) and processes them asynchronously. This is the standard mechanism for bulk provisioning users, enrollments, and courses at the account level.
+
+> **SIS Import vs. CSV Importer:** `SisImporter` submits files to Canvas's native SIS pipeline (async, SIS IDs). `CsvImporter` calls the REST API row-by-row (sync, Canvas numeric IDs). Use SIS import for bulk provisioning; use `CsvImporter` for targeted field updates.
+
+### Basic Usage
+
+```php
+use JarredCain\CanvasLms\Facades\Canvas;
+
+// From a file — Canvas determines the resource type from the filename
+$import = Canvas::sisImport()->fromFile('/path/to/users.csv')->submit();
+
+// From a CSV string
+$import = Canvas::sisImport()->fromCsv($csvString, 'enrollments.csv')->submit();
+
+// From a zip containing multiple CSV files
+$import = Canvas::sisImport()->fromZip('/path/to/sis_bundle.zip')->submit();
+
+// Explicit account (defaults to canvas.account_id from config)
+$import = Canvas::sisImport(accountId: 5)->fromFile('/path/to/users.csv')->submit();
+```
+
+### Waiting for Completion
+
+`submit()` returns a `SisImport` model immediately. Canvas processes the file asynchronously.
+
+```php
+$import = Canvas::sisImport()->fromFile('/path/to/users.csv')->submit();
+
+// Block until Canvas finishes (polls every 2s, default timeout 120s)
+$import->wait();
+$import->workflow_state; // 'imported', 'failed', 'imported_with_messages'
+$import->progress;       // 100
+
+// Or poll manually
+while ($import->isPending()) {
+    sleep(5);
+    $import->refresh();
+}
+```
+
+### Import Options
+
+```php
+Canvas::sisImport()
+    ->fromFile('/path/to/users.csv')
+    ->batchMode(termId: 3)          // Remove records absent from this file (scoped to a term)
+    ->diffing('users-nightly')      // Only process rows that changed since the last run
+    ->changeThreshold(20)           // Abort if >20% of records would be deleted
+    ->skipDeletes()                 // Never delete — only create and update
+    ->overrideSisStickiness()       // Overwrite SIS-sticky fields
+    ->submit()
+    ->wait();
+```
+
+| Method | Description |
+|---|---|
+| `fromFile(path)` | Load from a local CSV file path |
+| `fromCsv(string, filename)` | Load from a raw CSV string |
+| `fromZip(path)` | Load from a zip containing multiple SIS CSV files |
+| `batchMode(termId)` | Delete records in the term that are absent from this file |
+| `diffing(identifier, dropStatus)` | Skip unchanged rows compared to the previous run |
+| `skipDeletes()` | Ignore `deleted` status rows — only create and update |
+| `changeThreshold(int)` | Abort if more than N% of records would be deleted |
+| `overrideSisStickiness()` | Allow overwriting SIS-sticky fields |
+| `addSisStickiness()` | Mark all touched fields as SIS-sticky after import |
+| `clearSisStickiness()` | Clear the SIS-sticky flag from all touched fields |
+| `submit()` | Upload to Canvas and return a `SisImport` |
+
+---
+
+## Suspending Users via SIS
+
+Canvas SIS user CSVs accept a `status` column with values `active`, `suspended`, or `deleted`. `SisUserCsvBuilder` is a fluent builder that generates this CSV and submits it through `SisImporter`.
+
+Use this approach for **bulk** or **SIS-ID-driven** workflows. For single-user suspension via the REST API, use [`User::suspend()`](#user-account-status) instead.
+
+| | `User::suspend()` | `SisUserCsvBuilder` |
+|---|---|---|
+| **Identifier** | Canvas numeric ID | SIS user ID (`sis_user_id`) |
+| **Scale** | Single user | Bulk |
+| **Processing** | Immediate | Async (SIS job queue) |
+
+### Building and Submitting
+
+```php
+use JarredCain\CanvasLms\Sis\SisUserCsvBuilder;
+use JarredCain\CanvasLms\Facades\Canvas;
+
+// Suspend by SIS ID
+SisUserCsvBuilder::make()
+    ->suspend('sis_001')
+    ->suspend('sis_002')
+    ->submitVia(Canvas::sisImport())
+    ->wait();
+
+// Mix statuses in one import
+SisUserCsvBuilder::make()
+    ->suspend('sis_001')
+    ->activate('sis_002')  // re-activate a suspended user
+    ->delete('sis_003')    // remove entirely
+    ->submitVia(Canvas::sisImport());
+```
+
+### From User Model Instances
+
+When you already have `User` objects, the builder reads `sis_user_id` automatically:
+
+```php
+$users = Canvas::accountCourses()->first()->enrollments()->all()
+    ->map(fn($e) => $e->user);
+
+SisUserCsvBuilder::make()
+    ->suspendUsers($users)
+    ->submitVia(Canvas::sisImport());
+
+// Re-activate the same set
+SisUserCsvBuilder::make()
+    ->activateUsers($users)
+    ->submitVia(Canvas::sisImport());
+```
+
+> Users without a `sis_user_id` will throw `InvalidArgumentException` — they were not provisioned via SIS and cannot be managed through this path.
+
+### Inspect Before Submitting
+
+```php
+// Get the raw CSV string
+$csv = SisUserCsvBuilder::make()->suspend('u1')->suspend('u2')->toCsv();
+
+// Write to a file for review
+SisUserCsvBuilder::make()->suspend('u1')->toFile('/tmp/suspend_preview.csv');
+```
+
+### SisUserCsvBuilder Reference
+
+| Method | Description |
+|---|---|
+| `suspend(sisUserId)` | Add a row with `status=suspended` |
+| `activate(sisUserId)` | Add a row with `status=active` |
+| `delete(sisUserId)` | Add a row with `status=deleted` |
+| `addRow(sisUserId, status)` | Add a row with an explicit status value |
+| `suspendUsers(iterable)` | Bulk-add suspend rows from `User` model instances |
+| `activateUsers(iterable)` | Bulk-add activate rows from `User` model instances |
+| `toCsv()` | Return the CSV as a string |
+| `toFile(path)` | Write the CSV to a file |
+| `submitVia(SisImporter)` | Submit via the given importer, return `SisImport` |
+| `count()` | Number of rows queued |
+| `isEmpty()` | Whether any rows have been added |
 
 ---
 

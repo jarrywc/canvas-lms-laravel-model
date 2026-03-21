@@ -1,0 +1,16 @@
+[
+  {
+    "id": 42,
+    "name": "Alice Smith",
+    "login_id": "alice.smith",
+    "email": "alice@example.com",
+    "sis_user_id": "sis_alice"
+  },
+  {
+    "id": 43,
+    "name": "Alicia Jones",
+    "login_id": "alicia.j",
+    "email": "alicia@example.com",
+    "sis_user_id": "sis_alicia"
+  }
+]

@@ -19,6 +19,8 @@ use JarredCain\CanvasLms\Models\Submission;
 use JarredCain\CanvasLms\Models\User;
 use JarredCain\CanvasLms\Query\Builder;
 use JarredCain\CanvasLms\Sis\SisImporter;
+use JarredCain\CanvasLms\Users\UserEmailLookup;
+use JarredCain\CanvasLms\Utilities\CourseUserCollector;
 
 class Canvas
 {
@@ -192,6 +194,46 @@ class Canvas
     public function submission(int|string $id): Submission
     {
         return Submission::newWithId($id);
+    }
+
+    // -------------------------------------------------------------------------
+    // Course user aggregation
+    // -------------------------------------------------------------------------
+
+    /**
+     * Return a fluent collector for unique users (id + email) across multiple courses.
+     *
+     * Usage:
+     *   Canvas::courseUserList()->courses([23, 24, 25])->get();
+     *   Canvas::courseUserList()->courseRange(23, 25)->get();
+     */
+    public function courseUserList(): CourseUserCollector
+    {
+        return new CourseUserCollector($this->client);
+    }
+
+    // -------------------------------------------------------------------------
+    // User utilities
+    // -------------------------------------------------------------------------
+
+    /**
+     * Look up Canvas users by email address.
+     * Returns a UserEmailLookup builder — chain fromEmails() or fromCsv() to provide input.
+     *
+     * Usage:
+     *   Canvas::userEmailLookup()
+     *       ->fromEmails(['alice@example.com', 'bob@example.com'])
+     *       ->withStatus()
+     *       ->lookup();
+     *
+     *   Canvas::userEmailLookup()->fromCsv('/path/to/emails.csv')->toCsv();
+     *
+     * @param int|string|null $accountId  Override the configured account ID
+     */
+    public function userEmailLookup(int|string|null $accountId = null): UserEmailLookup
+    {
+        $id = $accountId ?? config('canvas.account_id', 1);
+        return new UserEmailLookup($this->client, $id);
     }
 
     // -------------------------------------------------------------------------

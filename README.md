@@ -176,6 +176,25 @@ Canvas::accountCourses()
 
 In Canvas, subaccounts are accounts — `subAccountCourses(id)` is a named shortcut for `accountCourses(id)` that makes the intent clear when working with subaccount hierarchies. You can also use `forSubAccount(id)` directly on any builder.
 
+### Cross-Course User Listing
+
+`courseUserList()` collects unique users (id + email) across a set of courses. It follows all pagination automatically and deduplicates users who appear in more than one course.
+
+```php
+// Explicit list of course IDs
+$users = Canvas::courseUserList()->courses([23, 24, 25])->get();
+
+// Or a range (inclusive)
+$users = Canvas::courseUserList()->courseRange(23, 25)->get();
+
+// Returns a Collection of ['id' => '...', 'email' => '...']
+foreach ($users as $user) {
+    echo "{$user['id']}: {$user['email']}";
+}
+```
+
+Each result contains only `id` and `email`. Users enrolled in multiple courses appear once. Requires an account-level token with permission to read course rosters.
+
 ### CRUD Operations
 
 ```php
@@ -718,6 +737,116 @@ SisUserCsvBuilder::make()->suspend('u1')->toFile('/tmp/suspend_preview.csv');
 | `submitVia(SisImporter)` | Submit via the given importer, return `SisImport` |
 | `count()` | Number of rows queued |
 | `isEmpty()` | Whether any rows have been added |
+
+---
+
+## User Email Lookup
+
+`userEmailLookup()` searches Canvas for users by email address and returns their Canvas ID, SIS ID, name, and optionally their account status. Input can be a plain array of emails or a CSV file.
+
+> Canvas's user search is fuzzy — the package filters results to exact, case-insensitive email matches.
+
+### From an Array
+
+```php
+use JarredCain\CanvasLms\Facades\Canvas;
+
+$results = Canvas::userEmailLookup()
+    ->fromEmails(['alice@example.com', 'bob@example.com'])
+    ->lookup();
+
+foreach ($results as $result) {
+    if ($result->found) {
+        echo "{$result->email} → ID: {$result->id}, SIS: {$result->sisUserId}";
+    } else {
+        echo "{$result->email} → not found";
+    }
+}
+```
+
+### From a CSV File
+
+```php
+// Default column header: 'email'
+$results = Canvas::userEmailLookup()
+    ->fromCsv('/path/to/users.csv')
+    ->lookup();
+
+// Custom column header (case-insensitive)
+$results = Canvas::userEmailLookup()
+    ->fromCsv('/path/to/users.csv', 'Email Address')
+    ->lookup();
+
+// From a raw CSV string
+$results = Canvas::userEmailLookup()
+    ->fromCsvString($csvString)
+    ->lookup();
+```
+
+Duplicate emails in the input are deduplicated automatically.
+
+### Including Account Status
+
+Add `withStatus()` to also fetch whether each user is active or suspended. This makes one extra API call per found user.
+
+```php
+$results = Canvas::userEmailLookup()
+    ->fromEmails(['alice@example.com', 'bob@example.com'])
+    ->withStatus()
+    ->lookup();
+
+foreach ($results as $result) {
+    echo "{$result->email}: {$result->status}"; // 'active', 'suspended', or null if not found
+}
+```
+
+### CSV Output
+
+```php
+// Return CSV as a string
+$csv = Canvas::userEmailLookup()
+    ->fromCsv('/path/to/emails.csv')
+    ->withStatus()
+    ->toCsv();
+
+// Write directly to a file
+Canvas::userEmailLookup()
+    ->fromEmails(['alice@example.com'])
+    ->toFile('/path/to/results.csv');
+```
+
+Output columns: `email`, `id`, `sis_user_id`, `name`, `status` _(only when `withStatus()` is used)_, `found`
+
+### Explicit Account
+
+Defaults to `canvas.account_id` from config. Override when working with a specific subaccount:
+
+```php
+Canvas::userEmailLookup(accountId: 5)->fromEmails([...])->lookup();
+```
+
+### `UserEmailLookup` Reference
+
+| Method | Description |
+|---|---|
+| `fromEmails(array)` | Provide a plain array of email addresses |
+| `fromCsv(path, column)` | Read emails from a CSV file (default column: `'email'`) |
+| `fromCsvString(csv, column)` | Read emails from a raw CSV string |
+| `withStatus()` | Also fetch `active`/`suspended` login status per found user |
+| `lookup()` | Execute and return a `Collection<UserLookupResult>` |
+| `toCsv()` | Execute and return results as a CSV string |
+| `toFile(path)` | Execute and write results to a CSV file |
+
+### `UserLookupResult` Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `$email` | `string` | The email address that was searched |
+| `$found` | `bool` | Whether a matching user was found |
+| `$id` | `string\|null` | Canvas user ID |
+| `$sisUserId` | `string\|null` | SIS user ID (null if not provisioned via SIS) |
+| `$name` | `string\|null` | User's full name |
+| `$status` | `string\|null` | `'active'` or `'suspended'` — only set when `withStatus()` was used |
 
 ---
 

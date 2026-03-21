@@ -178,7 +178,7 @@ class CsvImporter
      */
     private function importHandle($handle): ImportResult
     {
-        $headers = fgetcsv($handle);
+        $headers = fgetcsv($handle, 0, ',', '"', '');
 
         if ($headers === false || $headers === null) {
             return new ImportResult(new Collection());
@@ -191,7 +191,7 @@ class CsvImporter
         $results  = [];
         $rowIndex = 1; // 1 = first data row (header was row 0)
 
-        while (($row = fgetcsv($handle)) !== false) {
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
             $rowIndex++;
 
             if ($this->isBlankRow($row)) {

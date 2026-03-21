@@ -255,7 +255,7 @@ class UserEmailLookup
         fwrite($handle, $csv);
         rewind($handle);
 
-        $headers = fgetcsv($handle);
+        $headers = fgetcsv($handle, 0, ',', '"', '');
 
         if ($headers === false || $headers === null) {
             fclose($handle);
@@ -274,7 +274,7 @@ class UserEmailLookup
         }
 
         $emails = [];
-        while (($row = fgetcsv($handle)) !== false) {
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
             $value = trim($row[$index] ?? '');
             if ($value !== '') {
                 $emails[] = strtolower($value);

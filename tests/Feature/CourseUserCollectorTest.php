@@ -187,6 +187,47 @@ class CourseUserCollectorTest extends TestCase
         });
     }
 
+    public function test_continues_when_one_course_returns_500(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+                ['errors' => [['message' => 'An error occurred.']]],
+                500,
+            ),
+            'canvas.example.com/api/v1/courses/24/users*' => Http::response(
+                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/users')]
+            ),
+        ]);
+
+        $collector = Canvas::courseUserList()->courses([23, 24]);
+        $users     = $collector->get();
+
+        $this->assertCount(1, $users);
+        $this->assertSame('1', $users[0]['id']);
+
+        $errors = $collector->getErrors();
+        $this->assertArrayHasKey('23', $errors);
+        $this->assertStringContainsString('500', $errors['23']);
+    }
+
+    public function test_get_errors_is_empty_when_all_courses_succeed(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+            ),
+        ]);
+
+        $collector = Canvas::courseUserList()->courses([23]);
+        $collector->get();
+
+        $this->assertEmpty($collector->getErrors());
+    }
+
     public function test_without_enrollment_filter_does_not_send_enrollment_type(): void
     {
         Http::fake([

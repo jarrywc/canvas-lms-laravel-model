@@ -3,6 +3,7 @@
 namespace JarredCain\CanvasLms\Utilities;
 
 use Illuminate\Support\Collection;
+use JarredCain\CanvasLms\Exceptions\CanvasException;
 use JarredCain\CanvasLms\Http\CanvasClient;
 use JarredCain\CanvasLms\Models\User;
 use JarredCain\CanvasLms\Query\Builder;
@@ -21,6 +22,9 @@ class CourseUserCollector
     private array $courseIds = [];
 
     private array $enrollmentTypes = [];
+
+    /** @var array<string, string> Course ID => error message from the last get() call */
+    private array $errors = [];
 
     public function __construct(private readonly CanvasClient $client) {}
 
@@ -72,34 +76,50 @@ class CourseUserCollector
      * Fetch all unique users across the configured courses.
      *
      * Iterates each course, requests all pages, and deduplicates by user ID.
+     * Courses that return API errors are skipped; their IDs are recorded in $errors.
      *
      * @return Collection<int, array{id: string, name: string|null, email: string|null}>
      */
     public function get(): Collection
     {
-        $seen    = [];
-        $results = [];
+        $seen         = [];
+        $results      = [];
+        $this->errors = [];
 
         foreach ($this->courseIds as $courseId) {
-            $builder = (new Builder(User::class))
-                ->setClient($this->client)
-                ->forCourse($courseId)
-                ->include(['email']);
+            try {
+                $builder = (new Builder(User::class))
+                    ->setClient($this->client)
+                    ->forCourse($courseId)
+                    ->include(['email']);
 
-            if (!empty($this->enrollmentTypes)) {
-                $builder = $builder->ofEnrollmentType($this->enrollmentTypes);
-            }
-
-            $users = $builder->all();
-
-            foreach ($users as $user) {
-                if (!isset($seen[$user->id])) {
-                    $seen[$user->id] = true;
-                    $results[]       = ['id' => $user->id, 'name' => $user->name, 'email' => $user->email];
+                if (!empty($this->enrollmentTypes)) {
+                    $builder = $builder->ofEnrollmentType($this->enrollmentTypes);
                 }
+
+                $users = $builder->all();
+
+                foreach ($users as $user) {
+                    if (!isset($seen[$user->id])) {
+                        $seen[$user->id] = true;
+                        $results[]       = ['id' => $user->id, 'name' => $user->name, 'email' => $user->email];
+                    }
+                }
+            } catch (CanvasException $e) {
+                $this->errors[$courseId] = $e->getMessage();
             }
         }
 
         return new Collection($results);
+    }
+
+    /**
+     * Get errors from the last get() call, keyed by course ID.
+     *
+     * @return array<string, string>
+     */
+    public function getErrors(): array
+    {
+        return $this->errors;
     }
 }

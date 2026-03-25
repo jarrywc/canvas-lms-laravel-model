@@ -22,9 +22,16 @@ use JarredCain\CanvasLms\Http\CanvasClient;
  *       ->withStatus()
  *       ->toCsv();
  *
+ * Scoped to a specific account:
+ *   Canvas::userEmailLookup()
+ *       ->forAccount(42)
+ *       ->fromEmails(['alice@example.com'])
+ *       ->lookup();
+ *
  * Notes:
  *   - Searches GET /api/v1/accounts/:id/users?search_term={email}&include[]=email
- *     and filters for an exact, case-insensitive email match.
+ *     (uses "self" when no account is specified, searching all accounts).
+ *     Filters for an exact, case-insensitive email match.
  *   - withStatus() adds one extra API call per found user (GET /api/v1/users/:id/logins)
  *     to check whether any login is suspended. Not used for not-found users.
  *   - Deleted users are excluded from Canvas search results by default; they
@@ -37,9 +44,10 @@ class UserEmailLookup
 
     protected bool $statusEnabled = false;
 
+    protected string|int|null $accountId = null;
+
     public function __construct(
         private readonly CanvasClient $client,
-        private readonly string|int   $accountId,
     ) {
     }
 
@@ -105,6 +113,17 @@ class UserEmailLookup
         return $clone;
     }
 
+    /**
+     * Scope the lookup to a specific Canvas account.
+     * When not set, searches all accounts (uses "self").
+     */
+    public function forAccount(int|string $accountId): static
+    {
+        $clone            = clone $this;
+        $clone->accountId = $accountId;
+        return $clone;
+    }
+
     // -------------------------------------------------------------------------
     // Output
     // -------------------------------------------------------------------------
@@ -167,8 +186,9 @@ class UserEmailLookup
 
     private function lookupSingle(string $email): UserLookupResult
     {
+        $account  = $this->accountId ?? 'self';
         $response = $this->client->get(
-            "api/v1/accounts/{$this->accountId}/users",
+            "api/v1/accounts/{$account}/users",
             ['search_term' => $email, 'include' => ['email']]
         );
 

@@ -228,12 +228,12 @@ class Canvas
      *
      *   Canvas::userEmailLookup()->fromCsv('/path/to/emails.csv')->toCsv();
      *
-     * @param int|string|null $accountId  Override the configured account ID
+     * @param int|string|null $accountId  Scope to a specific account (searches all accounts when null)
      */
     public function userEmailLookup(int|string|null $accountId = null): UserEmailLookup
     {
-        $id = $accountId ?? config('canvas.account_id', 1);
-        return new UserEmailLookup($this->client, $id);
+        $lookup = new UserEmailLookup($this->client);
+        return $accountId !== null ? $lookup->forAccount($accountId) : $lookup;
     }
 
     // -------------------------------------------------------------------------

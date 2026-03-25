@@ -8,17 +8,19 @@ use JarredCain\CanvasLms\Models\User;
 use JarredCain\CanvasLms\Query\Builder;
 
 /**
- * Collects unique users (id + email) across multiple courses.
+ * Collects unique users (id + name + email) across multiple courses.
  *
  * Usage:
  *   Canvas::courseUserList()->courses([23, 24, 25])->get();
- *   Canvas::courseUserList()->courseRange(23, 25)->get();
+ *   Canvas::courseUserList()->courseRange(23, 25)->studentsOnly()->get();
  *
- * Returns a Collection of ['id' => '...', 'email' => '...'] with no duplicate user IDs.
+ * Returns a Collection of ['id' => '...', 'name' => '...', 'email' => '...'] with no duplicate user IDs.
  */
 class CourseUserCollector
 {
     private array $courseIds = [];
+
+    private array $enrollmentTypes = [];
 
     public function __construct(private readonly CanvasClient $client) {}
 
@@ -32,6 +34,27 @@ class CourseUserCollector
         $this->courseIds = array_map('strval', $ids);
 
         return $this;
+    }
+
+    /**
+     * Filter users by enrollment type(s).
+     * Valid values: student, teacher, ta, observer, designer
+     *
+     * @param  string|array<string>  $types
+     */
+    public function enrollmentType(string|array $types): static
+    {
+        $this->enrollmentTypes = (array) $types;
+
+        return $this;
+    }
+
+    /**
+     * Convenience: only return students.
+     */
+    public function studentsOnly(): static
+    {
+        return $this->enrollmentType('student');
     }
 
     /**
@@ -50,7 +73,7 @@ class CourseUserCollector
      *
      * Iterates each course, requests all pages, and deduplicates by user ID.
      *
-     * @return Collection<int, array{id: string, email: string|null}>
+     * @return Collection<int, array{id: string, name: string|null, email: string|null}>
      */
     public function get(): Collection
     {
@@ -58,16 +81,21 @@ class CourseUserCollector
         $results = [];
 
         foreach ($this->courseIds as $courseId) {
-            $users = (new Builder(User::class))
+            $builder = (new Builder(User::class))
                 ->setClient($this->client)
                 ->forCourse($courseId)
-                ->include(['email'])
-                ->all();
+                ->include(['email']);
+
+            if (!empty($this->enrollmentTypes)) {
+                $builder = $builder->ofEnrollmentType($this->enrollmentTypes);
+            }
+
+            $users = $builder->all();
 
             foreach ($users as $user) {
                 if (!isset($seen[$user->id])) {
                     $seen[$user->id] = true;
-                    $results[]       = ['id' => $user->id, 'email' => $user->email];
+                    $results[]       = ['id' => $user->id, 'name' => $user->name, 'email' => $user->email];
                 }
             }
         }

@@ -148,7 +148,7 @@ class CourseUserCollectorTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_each_result_has_id_and_email_keys(): void
+    public function test_each_result_has_id_name_and_email_keys(): void
     {
         Http::fake([
             'canvas.example.com/api/v1/courses/5/users*' => Http::response(
@@ -162,7 +162,46 @@ class CourseUserCollectorTest extends TestCase
 
         $user = $users->first();
         $this->assertArrayHasKey('id', $user);
+        $this->assertArrayHasKey('name', $user);
         $this->assertArrayHasKey('email', $user);
-        $this->assertCount(2, $user); // only id and email, nothing else
+        $this->assertSame('Dana', $user['name']);
+        $this->assertCount(3, $user);
+    }
+
+    public function test_students_only_sends_enrollment_type_parameter(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+            ),
+        ]);
+
+        Canvas::courseUserList()->courses([23])->studentsOnly()->get();
+
+        Http::assertSent(function (Request $request) {
+            $url = urldecode($request->url());
+            return str_contains($url, 'enrollment_type')
+                && str_contains($url, 'student');
+        });
+    }
+
+    public function test_without_enrollment_filter_does_not_send_enrollment_type(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+                [],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+            ),
+        ]);
+
+        Canvas::courseUserList()->courses([23])->get();
+
+        Http::assertSent(function (Request $request) {
+            $url = urldecode($request->url());
+            return !str_contains($url, 'enrollment_type');
+        });
     }
 }

@@ -178,7 +178,7 @@ In Canvas, subaccounts are accounts — `subAccountCourses(id)` is a named short
 
 ### Cross-Course User Listing
 
-`courseUserList()` collects unique users (id + email) across a set of courses. It follows all pagination automatically and deduplicates users who appear in more than one course.
+`courseUserList()` collects unique users (id + name + email) across a set of courses. It follows all pagination automatically and deduplicates users who appear in more than one course.
 
 ```php
 // Explicit list of course IDs
@@ -187,13 +187,19 @@ $users = Canvas::courseUserList()->courses([23, 24, 25])->get();
 // Or a range (inclusive)
 $users = Canvas::courseUserList()->courseRange(23, 25)->get();
 
-// Returns a Collection of ['id' => '...', 'email' => '...']
+// Students only
+$students = Canvas::courseUserList()->courses([23, 24, 25])->studentsOnly()->get();
+
+// Custom enrollment type filter
+$users = Canvas::courseUserList()->courses([23])->enrollmentType(['student', 'observer'])->get();
+
+// Returns a Collection of ['id' => '...', 'name' => '...', 'email' => '...']
 foreach ($users as $user) {
-    echo "{$user['id']}: {$user['email']}";
+    echo "{$user['id']}: {$user['name']} ({$user['email']})";
 }
 ```
 
-Each result contains only `id` and `email`. Users enrolled in multiple courses appear once. Requires an account-level token with permission to read course rosters.
+Each result contains `id`, `name`, and `email`. Users enrolled in multiple courses appear once. Requires an account-level token with permission to read course rosters.
 
 ### CRUD Operations
 
@@ -817,12 +823,19 @@ Canvas::userEmailLookup()
 
 Output columns: `email`, `id`, `sis_user_id`, `name`, `status` _(only when `withStatus()` is used)_, `found`
 
-### Explicit Account
+### Account Scope
 
-Defaults to `canvas.account_id` from config. Override when working with a specific subaccount:
+By default, the lookup searches all accounts (uses Canvas `"self"`). To scope to a specific account, pass an account ID via the factory method or the fluent `forAccount()` method:
 
 ```php
+// Search all accounts (default)
+Canvas::userEmailLookup()->fromEmails([...])->lookup();
+
+// Scope to a specific account
 Canvas::userEmailLookup(accountId: 5)->fromEmails([...])->lookup();
+
+// Or use the fluent method
+Canvas::userEmailLookup()->forAccount(5)->fromEmails([...])->lookup();
 ```
 
 ### `UserEmailLookup` Reference
@@ -832,6 +845,7 @@ Canvas::userEmailLookup(accountId: 5)->fromEmails([...])->lookup();
 | `fromEmails(array)` | Provide a plain array of email addresses |
 | `fromCsv(path, column)` | Read emails from a CSV file (default column: `'email'`) |
 | `fromCsvString(csv, column)` | Read emails from a raw CSV string |
+| `forAccount(id)` | Scope the lookup to a specific Canvas account |
 | `withStatus()` | Also fetch `active`/`suspended` login status per found user |
 | `lookup()` | Execute and return a `Collection<UserLookupResult>` |
 | `toCsv()` | Execute and return results as a CSV string |

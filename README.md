@@ -29,9 +29,29 @@ CANVAS_URL=https://your-institution.instructure.com
 CANVAS_AUTH_DRIVER=token
 CANVAS_API_TOKEN=your-api-token
 CANVAS_ACCOUNT_ID=1
+CANVAS_USER_AGENT=MyApp/1.0
 ```
 
 The full config is at `config/canvas.php`.
+
+### User-Agent
+
+Canvas requires a `User-Agent` header on all API requests. The package sends one automatically, defaulting to `CanvasLmsLaravel/1.0`. Override it to identify your application:
+
+```env
+CANVAS_USER_AGENT=MyApp/1.0
+```
+
+### API Logging
+
+Enable request/response logging for all Canvas API calls:
+
+```env
+CANVAS_LOG_ENABLED=true
+CANVAS_LOG_CHANNEL=stack    # any Laravel log channel, or omit for default
+```
+
+When enabled, requests are logged at `debug` level and failed responses at `warning` level. Response bodies are truncated at 2000 characters. OAuth2 token operations are also logged with secrets masked.
 
 ---
 
@@ -71,6 +91,16 @@ php artisan migrate
 ```env
 CANVAS_TOKEN_STORAGE=database
 ```
+
+### Testing Your Credentials
+
+Verify your auth configuration is working with a real API call:
+
+```bash
+php artisan canvas:test-auth
+```
+
+This command checks your config values, validates credentials for the active auth driver (token or OAuth2), and calls `GET /api/v1/users/self` to confirm authentication. On success it prints the authenticated user's ID, name, and email.
 
 For multi-user OAuth2, scope requests to the authenticated user with `actingAs()`:
 

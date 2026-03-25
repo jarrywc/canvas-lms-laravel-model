@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Str;
 use JarredCain\CanvasLms\Auth\Storage\TokenStorageInterface;
 use JarredCain\CanvasLms\Exceptions\AuthException;
+use Psr\Log\LoggerInterface;
 
 class OAuth2Handler
 {
@@ -19,7 +20,8 @@ class OAuth2Handler
 
     public function __construct(
         private readonly TokenStorageInterface $storage,
-        array $config
+        array $config,
+        private readonly ?LoggerInterface $logger = null,
     ) {
         $this->baseUrl      = rtrim($config['base_url'], '/');
         $this->clientId     = $config['oauth2']['client_id'];
@@ -112,10 +114,15 @@ class OAuth2Handler
         $tokenData = $this->storage->retrieve($storageKey);
 
         if ($tokenData) {
-            Http::withHeaders(['User-Agent' => config('canvas.user_agent', 'CanvasLmsLaravel/1.0')])
-                ->post($this->baseUrl . '/login/oauth2/token', [
-                    'token' => $tokenData['access_token'],
-                ]);
+            $url = $this->baseUrl . '/login/oauth2/token';
+            $payload = ['token' => $tokenData['access_token']];
+
+            $this->logOAuthRequest('revoke', $url, $payload);
+
+            $response = Http::withHeaders(['User-Agent' => config('canvas.user_agent', 'CanvasLmsLaravel/1.0')])
+                ->post($url, $payload);
+
+            $this->logOAuthResponse('revoke', $response);
         }
 
         $this->storage->forget($storageKey);
@@ -123,14 +130,21 @@ class OAuth2Handler
 
     private function exchangeCode(string $code): array
     {
+        $url = $this->baseUrl . '/login/oauth2/token';
+        $payload = [
+            'grant_type'    => 'authorization_code',
+            'client_id'     => $this->clientId,
+            'client_secret' => $this->clientSecret,
+            'redirect_uri'  => $this->redirectUri,
+            'code'          => $code,
+        ];
+
+        $this->logOAuthRequest('token_exchange', $url, $payload);
+
         $response = Http::withHeaders(['User-Agent' => config('canvas.user_agent', 'CanvasLmsLaravel/1.0')])
-            ->post($this->baseUrl . '/login/oauth2/token', [
-                'grant_type'    => 'authorization_code',
-                'client_id'     => $this->clientId,
-                'client_secret' => $this->clientSecret,
-                'redirect_uri'  => $this->redirectUri,
-                'code'          => $code,
-            ]);
+            ->post($url, $payload);
+
+        $this->logOAuthResponse('token_exchange', $response);
 
         if ($response->failed()) {
             throw new AuthException('Canvas token exchange failed: ' . $response->body());
@@ -141,13 +155,20 @@ class OAuth2Handler
 
     private function refresh(string $refreshToken, string $storageKey): array
     {
+        $url = $this->baseUrl . '/login/oauth2/token';
+        $payload = [
+            'grant_type'    => 'refresh_token',
+            'client_id'     => $this->clientId,
+            'client_secret' => $this->clientSecret,
+            'refresh_token' => $refreshToken,
+        ];
+
+        $this->logOAuthRequest('token_refresh', $url, $payload);
+
         $response = Http::withHeaders(['User-Agent' => config('canvas.user_agent', 'CanvasLmsLaravel/1.0')])
-            ->post($this->baseUrl . '/login/oauth2/token', [
-                'grant_type'    => 'refresh_token',
-                'client_id'     => $this->clientId,
-                'client_secret' => $this->clientSecret,
-                'refresh_token' => $refreshToken,
-            ]);
+            ->post($url, $payload);
+
+        $this->logOAuthResponse('token_refresh', $response);
 
         if ($response->failed()) {
             // Refresh token is no longer valid — clear stored token
@@ -196,5 +217,33 @@ class OAuth2Handler
         if (empty($sessionState) || $sessionState !== $requestState) {
             throw new AuthException('OAuth2 state mismatch. Possible CSRF attack.');
         }
+    }
+
+    private function logOAuthRequest(string $action, string $url, array $payload): void
+    {
+        if (!$this->logger) {
+            return;
+        }
+
+        $safe = $payload;
+        foreach (['client_secret', 'code', 'refresh_token', 'token'] as $key) {
+            if (isset($safe[$key])) {
+                $safe[$key] = '********';
+            }
+        }
+
+        $this->logger->debug("Canvas OAuth2 {$action}", ['url' => $url, 'payload' => $safe]);
+    }
+
+    private function logOAuthResponse(string $action, \Illuminate\Http\Client\Response $response): void
+    {
+        if (!$this->logger) {
+            return;
+        }
+
+        $level = $response->successful() ? 'debug' : 'warning';
+        $this->logger->log($level, "Canvas OAuth2 {$action} response", [
+            'status' => $response->status(),
+        ]);
     }
 }

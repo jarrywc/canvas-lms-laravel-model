@@ -64,6 +64,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | API Logging
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, all Canvas API requests and responses are logged. Set
+    | 'channel' to a Laravel log channel name defined in config/logging.php
+    | (e.g. "canvas", "stack", "single"). Leave null to use the default channel.
+    |
+    */
+
+    'logging' => [
+        'enabled' => env('CANVAS_LOG_ENABLED', false),
+        'channel' => env('CANVAS_LOG_CHANNEL'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Cross-System Field Adapter Mappings
     |--------------------------------------------------------------------------
     |

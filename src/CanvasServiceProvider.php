@@ -13,6 +13,7 @@ use JarredCain\CanvasLms\Auth\Storage\TokenStorageInterface;
 use JarredCain\CanvasLms\Console\Commands\TestAuthCommand;
 use JarredCain\CanvasLms\Http\CanvasClient;
 use JarredCain\CanvasLms\Http\Controllers\AdapterController;
+use Psr\Log\LoggerInterface;
 
 class CanvasServiceProvider extends ServiceProvider
 {
@@ -36,7 +37,8 @@ class CanvasServiceProvider extends ServiceProvider
         $this->app->singleton(OAuth2Handler::class, function ($app) {
             return new OAuth2Handler(
                 $app->make(TokenStorageInterface::class),
-                $app['config']['canvas']
+                $app['config']['canvas'],
+                $this->resolveLogger(),
             );
         });
 
@@ -56,7 +58,9 @@ class CanvasServiceProvider extends ServiceProvider
 
             return new CanvasClient(
                 $config['base_url'],
-                $auth->getToken()
+                $auth->getToken(),
+                $config['user_agent'] ?? '',
+                $this->resolveLogger(),
             );
         });
 
@@ -103,6 +107,21 @@ class CanvasServiceProvider extends ServiceProvider
 
         $this->registerOAuthRoutes();
         $this->registerAdapterRoutes();
+    }
+
+    private function resolveLogger(): ?LoggerInterface
+    {
+        $config = $this->app['config']['canvas'];
+
+        if (!($config['logging']['enabled'] ?? false)) {
+            return null;
+        }
+
+        $channel = $config['logging']['channel'] ?? null;
+
+        return $channel
+            ? $this->app['log']->channel($channel)
+            : $this->app['log']->driver();
     }
 
     private function registerAdapterRoutes(): void

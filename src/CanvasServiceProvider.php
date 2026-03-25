@@ -10,6 +10,7 @@ use JarredCain\CanvasLms\Auth\OAuth2\OAuthController;
 use JarredCain\CanvasLms\Auth\Storage\CacheTokenStorage;
 use JarredCain\CanvasLms\Auth\Storage\DatabaseTokenStorage;
 use JarredCain\CanvasLms\Auth\Storage\TokenStorageInterface;
+use JarredCain\CanvasLms\Console\Commands\TestAuthCommand;
 use JarredCain\CanvasLms\Http\CanvasClient;
 use JarredCain\CanvasLms\Http\Controllers\AdapterController;
 
@@ -81,6 +82,10 @@ class CanvasServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
+            $this->commands([
+                TestAuthCommand::class,
+            ]);
+
             $this->publishes([
                 __DIR__ . '/../config/canvas.php' => config_path('canvas.php'),
             ], 'canvas-config');

@@ -16,6 +16,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | User-Agent Header
+    |--------------------------------------------------------------------------
+    |
+    | Canvas API requires a User-Agent header on all requests. Customise this
+    | to identify your application.
+    |
+    */
+
+    'user_agent' => env('CANVAS_USER_AGENT', 'CanvasLmsLaravel/1.0'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Authentication Driver
     |--------------------------------------------------------------------------
     |

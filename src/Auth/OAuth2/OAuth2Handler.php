@@ -112,9 +112,10 @@ class OAuth2Handler
         $tokenData = $this->storage->retrieve($storageKey);
 
         if ($tokenData) {
-            Http::post($this->baseUrl . '/login/oauth2/token', [
-                'token' => $tokenData['access_token'],
-            ]);
+            Http::withHeaders(['User-Agent' => config('canvas.user_agent', 'CanvasLmsLaravel/1.0')])
+                ->post($this->baseUrl . '/login/oauth2/token', [
+                    'token' => $tokenData['access_token'],
+                ]);
         }
 
         $this->storage->forget($storageKey);
@@ -122,13 +123,14 @@ class OAuth2Handler
 
     private function exchangeCode(string $code): array
     {
-        $response = Http::post($this->baseUrl . '/login/oauth2/token', [
-            'grant_type'    => 'authorization_code',
-            'client_id'     => $this->clientId,
-            'client_secret' => $this->clientSecret,
-            'redirect_uri'  => $this->redirectUri,
-            'code'          => $code,
-        ]);
+        $response = Http::withHeaders(['User-Agent' => config('canvas.user_agent', 'CanvasLmsLaravel/1.0')])
+            ->post($this->baseUrl . '/login/oauth2/token', [
+                'grant_type'    => 'authorization_code',
+                'client_id'     => $this->clientId,
+                'client_secret' => $this->clientSecret,
+                'redirect_uri'  => $this->redirectUri,
+                'code'          => $code,
+            ]);
 
         if ($response->failed()) {
             throw new AuthException('Canvas token exchange failed: ' . $response->body());
@@ -139,12 +141,13 @@ class OAuth2Handler
 
     private function refresh(string $refreshToken, string $storageKey): array
     {
-        $response = Http::post($this->baseUrl . '/login/oauth2/token', [
-            'grant_type'    => 'refresh_token',
-            'client_id'     => $this->clientId,
-            'client_secret' => $this->clientSecret,
-            'refresh_token' => $refreshToken,
-        ]);
+        $response = Http::withHeaders(['User-Agent' => config('canvas.user_agent', 'CanvasLmsLaravel/1.0')])
+            ->post($this->baseUrl . '/login/oauth2/token', [
+                'grant_type'    => 'refresh_token',
+                'client_id'     => $this->clientId,
+                'client_secret' => $this->clientSecret,
+                'refresh_token' => $refreshToken,
+            ]);
 
         if ($response->failed()) {
             // Refresh token is no longer valid — clear stored token

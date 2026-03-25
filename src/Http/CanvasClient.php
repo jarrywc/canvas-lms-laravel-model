@@ -12,11 +12,13 @@ class CanvasClient
 {
     private string $baseUrl;
     private string $token;
+    private string $userAgent;
 
-    public function __construct(string $baseUrl, string $token)
+    public function __construct(string $baseUrl, string $token, string $userAgent = '')
     {
         $this->baseUrl = rtrim($baseUrl, '/');
         $this->token = $token;
+        $this->userAgent = $userAgent ?: config('canvas.user_agent', 'CanvasLmsLaravel/1.0');
     }
 
     public function withToken(string $token): static
@@ -65,7 +67,9 @@ class CanvasClient
     public function postMultipart(string $path, array $fields = [], array $attachments = []): Response
     {
         $url     = $this->resolveUrl($path);
-        $pending = Http::withToken($this->token)->acceptJson();
+        $pending = Http::withToken($this->token)
+            ->withHeaders(['User-Agent' => $this->userAgent])
+            ->acceptJson();
 
         foreach ($attachments as $attachment) {
             $pending = $pending->attach(
@@ -118,6 +122,7 @@ class CanvasClient
     private function buildRequest(): PendingRequest
     {
         return Http::withToken($this->token)
+            ->withHeaders(['User-Agent' => $this->userAgent])
             ->acceptJson()
             ->contentType('application/json');
     }

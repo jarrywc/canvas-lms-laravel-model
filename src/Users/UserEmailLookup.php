@@ -3,6 +3,7 @@
 namespace JarredCain\CanvasLms\Users;
 
 use Illuminate\Support\Collection;
+use JarredCain\CanvasLms\Exceptions\CanvasException;
 use JarredCain\CanvasLms\Http\CanvasClient;
 
 /**
@@ -143,7 +144,7 @@ class UserEmailLookup
             );
         }
 
-        return collect($this->emails)->map(fn(string $email) => $this->lookupSingle($email));
+        return collect($this->emails)->map(fn(string $email) => $this->lookupSingleSafe($email));
     }
 
     /**
@@ -183,6 +184,19 @@ class UserEmailLookup
     // -------------------------------------------------------------------------
     // Internal
     // -------------------------------------------------------------------------
+
+    private function lookupSingleSafe(string $email): UserLookupResult
+    {
+        try {
+            return $this->lookupSingle($email);
+        } catch (CanvasException $e) {
+            return new UserLookupResult(
+                email: $email,
+                found: false,
+                error: $e->getMessage(),
+            );
+        }
+    }
 
     private function lookupSingle(string $email): UserLookupResult
     {
@@ -244,6 +258,7 @@ class UserEmailLookup
             $headers[] = 'status';
         }
         $headers[] = 'found';
+        $headers[] = 'error';
 
         fputcsv($handle, $headers, ',', '"', '\\');
 
@@ -260,6 +275,7 @@ class UserEmailLookup
             }
 
             $row[] = $result->found ? 'true' : 'false';
+            $row[] = $result->error ?? '';
 
             fputcsv($handle, $row, ',', '"', '\\');
         }

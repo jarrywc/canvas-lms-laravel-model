@@ -269,8 +269,8 @@ class UserEmailLookupTest extends TestCase
         $csv   = Canvas::userEmailLookup()->fromEmails(['alice@example.com'])->toCsv();
         $lines = $this->csvLines($csv);
 
-        $this->assertSame(['email', 'id', 'sis_user_id', 'name', 'found'], $lines[0]);
-        $this->assertSame(['alice@example.com', '42', 'sis_alice', 'Alice Smith', 'true'], $lines[1]);
+        $this->assertSame(['email', 'id', 'sis_user_id', 'name', 'found', 'error'], $lines[0]);
+        $this->assertSame(['alice@example.com', '42', 'sis_alice', 'Alice Smith', 'true', ''], $lines[1]);
     }
 
     public function test_to_csv_with_status_includes_status_column(): void
@@ -287,8 +287,8 @@ class UserEmailLookupTest extends TestCase
 
         $lines = $this->csvLines($csv);
 
-        $this->assertSame(['email', 'id', 'sis_user_id', 'name', 'status', 'found'], $lines[0]);
-        $this->assertSame(['alice@example.com', '42', 'sis_alice', 'Alice Smith', 'active', 'true'], $lines[1]);
+        $this->assertSame(['email', 'id', 'sis_user_id', 'name', 'status', 'found', 'error'], $lines[0]);
+        $this->assertSame(['alice@example.com', '42', 'sis_alice', 'Alice Smith', 'active', 'true', ''], $lines[1]);
     }
 
     public function test_to_csv_not_found_row_has_empty_fields(): void
@@ -300,7 +300,73 @@ class UserEmailLookupTest extends TestCase
         $csv   = Canvas::userEmailLookup()->fromEmails(['ghost@example.com'])->toCsv();
         $lines = $this->csvLines($csv);
 
-        $this->assertSame(['ghost@example.com', '', '', '', 'false'], $lines[1]);
+        $this->assertSame(['ghost@example.com', '', '', '', 'false', ''], $lines[1]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Error resilience
+    // -------------------------------------------------------------------------
+
+    public function test_batch_lookup_continues_when_single_email_fails(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/accounts/*/users*' => Http::sequence()
+                ->push(['errors' => [['message' => 'An error occurred.']]], 500)
+                ->push($this->searchFixture(), 200),
+        ]);
+
+        $results = Canvas::userEmailLookup()
+            ->fromEmails(['bad@example.com', 'alice@example.com'])
+            ->lookup();
+
+        $this->assertCount(2, $results);
+        $this->assertFalse($results[0]->found);
+        $this->assertNotNull($results[0]->error);
+        $this->assertStringContainsString('500', $results[0]->error);
+        $this->assertTrue($results[1]->found);
+        $this->assertNull($results[1]->error);
+    }
+
+    public function test_error_result_has_correct_shape(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/accounts/*/users*' => Http::response(
+                ['errors' => [['message' => 'An error occurred.']]],
+                500,
+            ),
+        ]);
+
+        $result = Canvas::userEmailLookup()
+            ->fromEmails(['fail@example.com'])
+            ->lookup()
+            ->first();
+
+        $this->assertFalse($result->found);
+        $this->assertNull($result->id);
+        $this->assertNull($result->sisUserId);
+        $this->assertNull($result->name);
+        $this->assertNull($result->status);
+        $this->assertNotNull($result->error);
+    }
+
+    public function test_to_csv_includes_error_column_on_failure(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/accounts/*/users*' => Http::sequence()
+                ->push(['errors' => [['message' => 'An error occurred.']]], 500)
+                ->push($this->searchFixture(), 200),
+        ]);
+
+        $csv   = Canvas::userEmailLookup()
+            ->fromEmails(['fail@example.com', 'alice@example.com'])
+            ->toCsv();
+        $lines = $this->csvLines($csv);
+
+        $this->assertSame('error', end($lines[0]));
+        $this->assertNotEmpty($lines[1][array_key_last($lines[1])]);
+        $this->assertSame('false', $lines[1][4]);
+        $this->assertSame('true', $lines[2][4]);
+        $this->assertSame('', $lines[2][array_key_last($lines[2])]);
     }
 
     // -------------------------------------------------------------------------

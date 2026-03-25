@@ -48,6 +48,11 @@ class Account extends CanvasModel
      * Hits GET /api/v1/accounts/:id/sub_accounts
      * Supports search_term, recursive=true, per_page.
      */
+    public function groups(): HasMany
+    {
+        return $this->hasMany(Group::class);
+    }
+
     public function subAccounts(): HasMany
     {
         return $this->hasMany(SubAccount::class);

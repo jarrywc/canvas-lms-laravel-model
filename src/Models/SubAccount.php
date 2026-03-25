@@ -56,6 +56,11 @@ class SubAccount extends CanvasModel
         return $this->hasMany(Enrollment::class);
     }
 
+    public function groups(): HasMany
+    {
+        return $this->hasMany(Group::class);
+    }
+
     public function subAccounts(): HasMany
     {
         return $this->hasMany(SubAccount::class);

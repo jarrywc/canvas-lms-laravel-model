@@ -228,6 +228,86 @@ class CourseUserCollectorTest extends TestCase
         $this->assertEmpty($collector->getErrors());
     }
 
+    // -------------------------------------------------------------------------
+    // forAccount()
+    // -------------------------------------------------------------------------
+
+    public function test_for_account_fetches_courses_then_users(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/accounts/1/courses*' => Http::response(
+                [['id' => '23', 'name' => 'Math 101'], ['id' => '24', 'name' => 'Science 201']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
+            ),
+            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+            ),
+            'canvas.example.com/api/v1/courses/24/users*' => Http::response(
+                [['id' => '2', 'name' => 'Bob', 'email' => 'bob@example.com']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/users')]
+            ),
+        ]);
+
+        $users = Canvas::courseUserList()->forAccount(1)->get();
+
+        $this->assertCount(2, $users);
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'accounts/1/courses'));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/23/users'));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/24/users'));
+    }
+
+    public function test_for_account_defaults_to_config_account_id(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/accounts/1/courses*' => Http::response(
+                [],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
+            ),
+        ]);
+
+        Canvas::courseUserList()->forAccount()->get();
+
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'accounts/1/courses'));
+    }
+
+    public function test_explicit_courses_override_for_account(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+            ),
+        ]);
+
+        $users = Canvas::courseUserList()->forAccount(1)->courses([23])->get();
+
+        $this->assertCount(1, $users);
+        Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'accounts/'));
+    }
+
+    public function test_for_account_records_error_when_account_fetch_fails(): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/accounts/1/courses*' => Http::response(
+                ['errors' => [['message' => 'An error occurred.']]],
+                500,
+            ),
+        ]);
+
+        $collector = Canvas::courseUserList()->forAccount(1);
+        $users     = $collector->get();
+
+        $this->assertCount(0, $users);
+        $this->assertArrayHasKey('_account', $collector->getErrors());
+        $this->assertStringContainsString('500', $collector->getErrors()['_account']);
+    }
+
     public function test_without_enrollment_filter_does_not_send_enrollment_type(): void
     {
         Http::fake([

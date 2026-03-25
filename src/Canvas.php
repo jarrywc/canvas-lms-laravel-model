@@ -93,6 +93,36 @@ class Canvas
     }
 
     /**
+     * List ALL users for an account/organization.
+     * Hits GET /api/v1/accounts/:id/users — returns org-wide results, not scoped to current user.
+     *
+     * Requires admin permissions on the account.
+     * Defaults to the account_id set in config/canvas.php.
+     *
+     * @param int|string|null $accountId  Override the configured account ID
+     */
+    public function accountUsers(int|string|null $accountId = null): Builder
+    {
+        $id = $accountId ?? config('canvas.account_id', 1);
+        return $this->builderFor(User::class)->forAccount($id);
+    }
+
+    /**
+     * List ALL groups for an account/organization.
+     * Hits GET /api/v1/accounts/:id/groups — returns org-wide results, not scoped to current user.
+     *
+     * Requires admin permissions on the account.
+     * Defaults to the account_id set in config/canvas.php.
+     *
+     * @param int|string|null $accountId  Override the configured account ID
+     */
+    public function accountGroups(int|string|null $accountId = null): Builder
+    {
+        $id = $accountId ?? config('canvas.account_id', 1);
+        return $this->builderFor(Group::class)->forAccount($id);
+    }
+
+    /**
      * List courses scoped to a specific subaccount.
      * Hits GET /api/v1/accounts/:subaccount_id/courses.
      *

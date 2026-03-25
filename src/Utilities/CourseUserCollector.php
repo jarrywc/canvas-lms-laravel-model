@@ -5,6 +5,7 @@ namespace JarredCain\CanvasLms\Utilities;
 use Illuminate\Support\Collection;
 use JarredCain\CanvasLms\Exceptions\CanvasException;
 use JarredCain\CanvasLms\Http\CanvasClient;
+use JarredCain\CanvasLms\Models\Course;
 use JarredCain\CanvasLms\Models\User;
 use JarredCain\CanvasLms\Query\Builder;
 
@@ -14,6 +15,7 @@ use JarredCain\CanvasLms\Query\Builder;
  * Usage:
  *   Canvas::courseUserList()->courses([23, 24, 25])->get();
  *   Canvas::courseUserList()->courseRange(23, 25)->studentsOnly()->get();
+ *   Canvas::courseUserList()->forAccount()->studentsOnly()->get();
  *
  * Returns a Collection of ['id' => '...', 'name' => '...', 'email' => '...'] with no duplicate user IDs.
  */
@@ -22,6 +24,8 @@ class CourseUserCollector
     private array $courseIds = [];
 
     private array $enrollmentTypes = [];
+
+    private int|string|null $accountId = null;
 
     /** @var array<string, string> Course ID => error message from the last get() call */
     private array $errors = [];
@@ -73,6 +77,21 @@ class CourseUserCollector
     }
 
     /**
+     * Discover courses from a Canvas account instead of specifying IDs.
+     * If courses() is also called, explicit IDs take priority.
+     *
+     * Defaults to the account_id from config/canvas.php when null is passed.
+     *
+     * @param int|string|null $accountId  Override the configured account ID
+     */
+    public function forAccount(int|string|null $accountId = null): static
+    {
+        $this->accountId = $accountId ?? config('canvas.account_id', 1);
+
+        return $this;
+    }
+
+    /**
      * Fetch all unique users across the configured courses.
      *
      * Iterates each course, requests all pages, and deduplicates by user ID.
@@ -85,6 +104,21 @@ class CourseUserCollector
         $seen         = [];
         $results      = [];
         $this->errors = [];
+
+        if (empty($this->courseIds) && $this->accountId !== null) {
+            try {
+                $courses = (new Builder(Course::class))
+                    ->setClient($this->client)
+                    ->forAccount($this->accountId)
+                    ->all();
+
+                $this->courseIds = $courses->pluck('id')->map(fn($id) => (string) $id)->all();
+            } catch (CanvasException $e) {
+                $this->errors['_account'] = $e->getMessage();
+
+                return new Collection($results);
+            }
+        }
 
         foreach ($this->courseIds as $courseId) {
             try {

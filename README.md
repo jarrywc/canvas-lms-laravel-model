@@ -208,7 +208,7 @@ In Canvas, subaccounts are accounts — `subAccountCourses(id)` is a named short
 
 ### Cross-Course User Listing
 
-`courseUserList()` collects unique users (id + name + email) across a set of courses. It follows all pagination automatically and deduplicates users who appear in more than one course.
+`courseUserList()` collects unique users (id + name + email) across a set of courses. It fetches account-level users for name/email data, then uses enrollment records to determine which users belong to which courses. Users enrolled in multiple courses are deduplicated.
 
 ```php
 // Explicit list of course IDs
@@ -216,6 +216,9 @@ $users = Canvas::courseUserList()->courses([23, 24, 25])->get();
 
 // Or a range (inclusive)
 $users = Canvas::courseUserList()->courseRange(23, 25)->get();
+
+// Discover courses from the account
+$users = Canvas::courseUserList()->forAccount()->studentsOnly()->get();
 
 // Students only
 $students = Canvas::courseUserList()->courses([23, 24, 25])->studentsOnly()->get();
@@ -227,13 +230,18 @@ $users = Canvas::courseUserList()->courses([23])->enrollmentType(['student', 'ob
 foreach ($users as $user) {
     echo "{$user['id']}: {$user['name']} ({$user['email']})";
 }
+
+// Check for partial failures (e.g. a course returned 500)
+$collector = Canvas::courseUserList()->courses([23, 24]);
+$users = $collector->get();
+$errors = $collector->getErrors(); // ['24' => 'Canvas API request failed [500]: ...']
 ```
 
-Each result contains `id`, `name`, and `email`. Users enrolled in multiple courses appear once. Requires an account-level token with permission to read course rosters.
+Each result contains `id`, `name`, and `email`. Requires an account-level token with permission to read course rosters and user data.
 
 ### Account User Report (by Cohort)
 
-`accountUserReport()` generates a user list organized by course — users enrolled in multiple courses appear once per course. Results can be exported directly to CSV.
+`accountUserReport()` generates a user list organized by course — users enrolled in multiple courses appear once per course. It fetches account users, courses, and enrollments separately, then joins them in memory. Results can be exported directly to CSV.
 
 ```php
 // All students across an account, grouped by course, as CSV
@@ -242,7 +250,7 @@ $csv = Canvas::accountUserReport()->forAccount()->studentsOnly()->toCsv();
 // Write to file
 Canvas::accountUserReport()->forAccount(5)->studentsOnly()->toFile('/tmp/students.csv');
 
-// Specific courses
+// Specific courses (fetches course names individually)
 Canvas::accountUserReport()->courses([23, 24])->toFile('/tmp/report.csv');
 
 // Get as a Collection
@@ -250,6 +258,11 @@ $rows = Canvas::accountUserReport()->forAccount()->studentsOnly()->get();
 foreach ($rows as $row) {
     echo "{$row['course_name']}: {$row['user_name']} ({$row['user_email']})";
 }
+
+// Check for partial failures
+$report = Canvas::accountUserReport()->forAccount();
+$rows = $report->get();
+$errors = $report->getErrors(); // keyed by course ID, or '_account' for account-level failures
 ```
 
 CSV columns: `course_id`, `course_name`, `user_id`, `user_name`, `user_email`
@@ -276,7 +289,7 @@ Course::query()->delete(42);
 
 ## Pagination
 
-Canvas paginates responses via the `Link` response header. The package handles this automatically.
+Canvas paginates responses via the `Link` response header. The package handles this automatically. The default page size is **100** (Canvas's maximum) — override with `perPage()` if needed. Cycle detection prevents infinite loops if a pagination URL is revisited.
 
 ```php
 $page = Course::query()->perPage(10)->get();
@@ -358,7 +371,7 @@ Enrollment::query()->get(); // Canvas has no flat /enrollments endpoint
 | `whereIn(field, array)` | Add an array parameter (`field[]=val`) |
 | `include(string\|array)` | Add `include[]=` sideloads |
 | `search(string)` | Set `search_term` |
-| `perPage(int)` | Set `per_page` |
+| `perPage(int)` | Set `per_page` (default: 100) |
 | `page(int)` | Set `page` |
 | `orderBy(field, direction)` | Set `sort` and `order` |
 | `forCourse(id)` | Push course context onto URL |

@@ -34,13 +34,20 @@ class CanvasClient
     public function get(string $path, array $query = []): Response
     {
         $url = $this->resolveUrl($path);
-        return $this->send('get', $url, ['query' => $query]);
+        if (!empty($query)) {
+            $url .= '?' . self::buildCanvasQuery($query);
+        }
+        return $this->send('get', $url);
     }
 
     public function getUrl(string $url, array $query = []): Response
     {
         // Used for opaque pagination URLs — do not prepend base URL
-        return $this->send('get', $url, ['query' => $query]);
+        if (!empty($query)) {
+            $separator = str_contains($url, '?') ? '&' : '?';
+            $url .= $separator . self::buildCanvasQuery($query);
+        }
+        return $this->send('get', $url);
     }
 
     public function post(string $path, array $data = []): Response
@@ -96,14 +103,12 @@ class CanvasClient
 
     private function send(string $method, string $url, array $options = []): Response
     {
-        $this->logRequest($method, $url, $options['json'] ?? $options['query'] ?? []);
+        $this->logRequest($method, $url, $options['json'] ?? []);
 
         $pending = $this->buildRequest();
 
         $httpResponse = match ($method) {
-            'get'    => empty($options['query'] ?? [])
-                            ? $pending->get($url)
-                            : $pending->get($url, $options['query']),
+            'get'    => $pending->get($url),
             'post'   => $pending->post($url, $options['json'] ?? []),
             'put'    => $pending->put($url, $options['json'] ?? []),
             'delete' => $pending->delete($url),
@@ -141,6 +146,35 @@ class CanvasClient
             ->withHeaders(['User-Agent' => $this->userAgent])
             ->acceptJson()
             ->contentType('application/json');
+    }
+
+    /**
+     * Build a query string using Canvas's expected bracket notation for arrays.
+     *
+     * Guzzle produces "key=val" (no brackets) and http_build_query produces
+     * "key[0]=val" (numeric index). Canvas requires "key[]=val".
+     */
+    private static function buildCanvasQuery(array $params): string
+    {
+        $parts = [];
+
+        foreach ($params as $key => $value) {
+            if ($value === null) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                foreach ($value as $v) {
+                    $parts[] = urlencode($key) . '[]=' . urlencode((string) $v);
+                }
+            } elseif (is_bool($value)) {
+                $parts[] = urlencode($key) . '=' . ($value ? 'true' : 'false');
+            } else {
+                $parts[] = urlencode($key) . '=' . urlencode((string) $value);
+            }
+        }
+
+        return implode('&', $parts);
     }
 
     private function resolveUrl(string $path): string

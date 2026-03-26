@@ -6,6 +6,7 @@ use Illuminate\Support\Collection;
 use JarredCain\CanvasLms\Exceptions\CanvasException;
 use JarredCain\CanvasLms\Http\CanvasClient;
 use JarredCain\CanvasLms\Models\Course;
+use JarredCain\CanvasLms\Models\Enrollment;
 use JarredCain\CanvasLms\Models\User;
 use JarredCain\CanvasLms\Query\Builder;
 
@@ -104,24 +105,37 @@ class AccountUserReport
 
         $courseMap = $this->resolveCourses();
 
+        if (empty($courseMap)) {
+            return new Collection($results);
+        }
+
+        // Fetch all account users once — gives us names + emails
+        $userMap = $this->fetchAccountUsers();
+
+        // Fetch enrollments per course and join with user data
         foreach ($courseMap as $courseId => $courseName) {
             try {
-                $builder = (new Builder(User::class))
+                $builder = (new Builder(Enrollment::class))
                     ->setClient($this->client)
-                    ->forCourse($courseId)
-                    ->include(['email']);
+                    ->forCourse($courseId);
 
                 if (!empty($this->enrollmentTypes)) {
-                    $builder = $builder->ofEnrollmentType($this->enrollmentTypes);
+                    $canvasTypes = array_map(
+                        fn(string $t) => ucfirst($t) . 'Enrollment',
+                        $this->enrollmentTypes
+                    );
+                    $builder = $builder->whereIn('type', $canvasTypes);
                 }
 
-                foreach ($builder->all() as $user) {
+                foreach ($builder->all() as $enrollment) {
+                    $userId = (string) $enrollment->user_id;
+                    $user   = $userMap[$userId] ?? [];
                     $results[] = [
                         'course_id'  => (string) $courseId,
                         'course_name' => $courseName,
-                        'user_id'    => $user->id,
-                        'user_name'  => $user->name,
-                        'user_email' => $user->email,
+                        'user_id'    => $userId,
+                        'user_name'  => $user['name'] ?? null,
+                        'user_email' => $user['email'] ?? null,
                     ];
                 }
             } catch (CanvasException $e) {
@@ -179,6 +193,36 @@ class AccountUserReport
     // -------------------------------------------------------------------------
     // Internal
     // -------------------------------------------------------------------------
+
+    /**
+     * Fetch all users for the account and build a userId => {name, email} map.
+     *
+     * @return array<string, array{name: string|null, email: string|null}>
+     */
+    private function fetchAccountUsers(): array
+    {
+        $accountId = $this->accountId ?? config('canvas.account_id', 1);
+        $map = [];
+
+        try {
+            $users = (new Builder(User::class))
+                ->setClient($this->client)
+                ->forAccount($accountId)
+                ->include(['email'])
+                ->all();
+
+            foreach ($users as $user) {
+                $map[(string) $user->id] = [
+                    'name'  => $user->name,
+                    'email' => $user->email,
+                ];
+            }
+        } catch (CanvasException $e) {
+            $this->errors['_users'] = $e->getMessage();
+        }
+
+        return $map;
+    }
 
     /**
      * Resolve course IDs to an id => name map.

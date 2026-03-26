@@ -15,6 +15,22 @@ class AccountUserReportTest extends TestCase
         return "<{$url}>; rel=\"current\"";
     }
 
+    private function fakeAccountContext(array $courses, array $users): void
+    {
+        Http::fake([
+            'canvas.example.com/api/v1/accounts/1/courses*' => Http::response(
+                $courses,
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
+            ),
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
+                $users,
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+        ]);
+    }
+
     // -------------------------------------------------------------------------
     // Factory
     // -------------------------------------------------------------------------
@@ -39,21 +55,30 @@ class AccountUserReportTest extends TestCase
                 200,
                 ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
             ),
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [
                     ['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com'],
                     ['id' => '2', 'name' => 'Bob',   'email' => 'bob@example.com'],
-                ],
-                200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
-            ),
-            'canvas.example.com/api/v1/courses/24/users*' => Http::response(
-                [
-                    ['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com'],
                     ['id' => '3', 'name' => 'Carol', 'email' => 'carol@example.com'],
                 ],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [
+                    ['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment'],
+                    ['id' => '101', 'user_id' => '2', 'type' => 'StudentEnrollment'],
+                ],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
+            ),
+            'canvas.example.com/api/v1/courses/24/enrollments*' => Http::response(
+                [
+                    ['id' => '102', 'user_id' => '1', 'type' => 'StudentEnrollment'],
+                    ['id' => '103', 'user_id' => '3', 'type' => 'StudentEnrollment'],
+                ],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/enrollments')]
             ),
         ]);
 
@@ -83,15 +108,20 @@ class AccountUserReportTest extends TestCase
                 200,
                 ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
             ),
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
             ),
-            'canvas.example.com/api/v1/courses/24/users*' => Http::response(
-                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
+            ),
+            'canvas.example.com/api/v1/courses/24/enrollments*' => Http::response(
+                [['id' => '101', 'user_id' => '1', 'type' => 'StudentEnrollment']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/enrollments')]
             ),
         ]);
 
@@ -114,22 +144,26 @@ class AccountUserReportTest extends TestCase
                 200,
                 ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
             ),
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
             ),
         ]);
 
         Canvas::accountUserReport()->forAccount(1)->studentsOnly()->get();
 
         Http::assertSent(function (Request $request) {
-            if (!str_contains($request->url(), 'courses/23/users')) {
+            if (!str_contains($request->url(), 'courses/23/enrollments')) {
                 return false;
             }
             $url = urldecode($request->url());
-            return str_contains($url, 'enrollment_type')
-                && str_contains($url, 'student');
+            return str_contains($url, 'type[]=StudentEnrollment');
         });
     }
 
@@ -144,10 +178,15 @@ class AccountUserReportTest extends TestCase
                 ['id' => '23', 'name' => 'Biology 101'],
                 200,
             ),
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
             ),
         ]);
 
@@ -169,10 +208,15 @@ class AccountUserReportTest extends TestCase
                 200,
                 ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
             ),
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
             ),
         ]);
 
@@ -201,10 +245,15 @@ class AccountUserReportTest extends TestCase
                 200,
                 ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
             ),
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
             ),
         ]);
 
@@ -252,12 +301,17 @@ class AccountUserReportTest extends TestCase
                 200,
                 ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
             ),
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
             ),
-            'canvas.example.com/api/v1/courses/24/users*' => Http::response(
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
+            ),
+            'canvas.example.com/api/v1/courses/24/enrollments*' => Http::response(
                 ['errors' => [['message' => 'An error occurred.']]],
                 500,
             ),

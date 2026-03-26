@@ -15,17 +15,16 @@ class CourseUserCollectorTest extends TestCase
         return "<{$url}>; rel=\"current\"";
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
-    private function fakeCourseUsers(int|string $courseId, array $users): void
+    /**
+     * Fake the account-level users endpoint that provides name + email lookup.
+     */
+    private function fakeAccountUsers(array $users): void
     {
         Http::fake([
-            "canvas.example.com/api/v1/courses/{$courseId}/users*" => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 $users,
                 200,
-                ['Link' => $this->noNextLink("https://canvas.example.com/api/v1/courses/{$courseId}/users")]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
             ),
         ]);
     }
@@ -42,13 +41,21 @@ class CourseUserCollectorTest extends TestCase
     public function test_collects_users_from_single_course(): void
     {
         Http::fake([
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [
                     ['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com'],
                     ['id' => '2', 'name' => 'Bob',   'email' => 'bob@example.com'],
                 ],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [
+                    ['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment'],
+                    ['id' => '101', 'user_id' => '2', 'type' => 'StudentEnrollment'],
+                ],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
             ),
         ]);
 
@@ -62,21 +69,30 @@ class CourseUserCollectorTest extends TestCase
     public function test_deduplicates_users_appearing_in_multiple_courses(): void
     {
         Http::fake([
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [
                     ['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com'],
                     ['id' => '2', 'name' => 'Bob',   'email' => 'bob@example.com'],
-                ],
-                200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
-            ),
-            'canvas.example.com/api/v1/courses/24/users*' => Http::response(
-                [
-                    ['id' => '2', 'name' => 'Bob',   'email' => 'bob@example.com'], // duplicate
                     ['id' => '3', 'name' => 'Carol', 'email' => 'carol@example.com'],
                 ],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [
+                    ['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment'],
+                    ['id' => '101', 'user_id' => '2', 'type' => 'StudentEnrollment'],
+                ],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
+            ),
+            'canvas.example.com/api/v1/courses/24/enrollments*' => Http::response(
+                [
+                    ['id' => '102', 'user_id' => '2', 'type' => 'StudentEnrollment'], // duplicate
+                    ['id' => '103', 'user_id' => '3', 'type' => 'StudentEnrollment'],
+                ],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/enrollments')]
             ),
         ]);
 
@@ -91,20 +107,29 @@ class CourseUserCollectorTest extends TestCase
     public function test_course_range_expands_to_inclusive_list(): void
     {
         Http::fake([
-            'canvas.example.com/api/v1/courses/10/users*' => Http::response(
-                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
+                [
+                    ['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com'],
+                    ['id' => '2', 'name' => 'Bob',   'email' => 'bob@example.com'],
+                    ['id' => '3', 'name' => 'Carol', 'email' => 'carol@example.com'],
+                ],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/10/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
             ),
-            'canvas.example.com/api/v1/courses/11/users*' => Http::response(
-                [['id' => '2', 'name' => 'Bob', 'email' => 'bob@example.com']],
+            'canvas.example.com/api/v1/courses/10/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/11/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/10/enrollments')]
             ),
-            'canvas.example.com/api/v1/courses/12/users*' => Http::response(
-                [['id' => '3', 'name' => 'Carol', 'email' => 'carol@example.com']],
+            'canvas.example.com/api/v1/courses/11/enrollments*' => Http::response(
+                [['id' => '101', 'user_id' => '2', 'type' => 'StudentEnrollment']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/12/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/11/enrollments')]
+            ),
+            'canvas.example.com/api/v1/courses/12/enrollments*' => Http::response(
+                [['id' => '102', 'user_id' => '3', 'type' => 'StudentEnrollment']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/12/enrollments')]
             ),
         ]);
 
@@ -113,29 +138,9 @@ class CourseUserCollectorTest extends TestCase
         $this->assertCount(3, $users);
 
         // Confirm all three courses were requested
-        Http::assertSentCount(3);
-        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/10/users'));
-        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/11/users'));
-        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/12/users'));
-    }
-
-    public function test_requests_include_email(): void
-    {
-        Http::fake([
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
-                [],
-                200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
-            ),
-        ]);
-
-        Canvas::courseUserList()->courses([23])->get();
-
-        Http::assertSent(function (Request $request) {
-            $url = urldecode($request->url());
-            return str_contains($url, 'include[0]=email')
-                || str_contains($url, 'include[]=email');
-        });
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/10/enrollments'));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/11/enrollments'));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/12/enrollments'));
     }
 
     public function test_returns_empty_collection_when_account_has_no_courses(): void
@@ -156,10 +161,15 @@ class CourseUserCollectorTest extends TestCase
     public function test_each_result_has_id_name_and_email_keys(): void
     {
         Http::fake([
-            'canvas.example.com/api/v1/courses/5/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [['id' => '9', 'name' => 'Dana', 'email' => 'dana@example.com']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/5/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/5/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '9', 'type' => 'StudentEnrollment']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/5/enrollments')]
             ),
         ]);
 
@@ -176,10 +186,15 @@ class CourseUserCollectorTest extends TestCase
     public function test_students_only_sends_enrollment_type_parameter(): void
     {
         Http::fake([
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
-                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
+                [],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
             ),
         ]);
 
@@ -187,22 +202,26 @@ class CourseUserCollectorTest extends TestCase
 
         Http::assertSent(function (Request $request) {
             $url = urldecode($request->url());
-            return str_contains($url, 'enrollment_type')
-                && str_contains($url, 'student');
+            return str_contains($url, 'type[]=StudentEnrollment');
         });
     }
 
     public function test_continues_when_one_course_returns_500(): void
     {
         Http::fake([
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
+                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
                 ['errors' => [['message' => 'An error occurred.']]],
                 500,
             ),
-            'canvas.example.com/api/v1/courses/24/users*' => Http::response(
-                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+            'canvas.example.com/api/v1/courses/24/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/enrollments')]
             ),
         ]);
 
@@ -220,10 +239,15 @@ class CourseUserCollectorTest extends TestCase
     public function test_get_errors_is_empty_when_all_courses_succeed(): void
     {
         Http::fake([
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
             ),
         ]);
 
@@ -245,15 +269,23 @@ class CourseUserCollectorTest extends TestCase
                 200,
                 ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
             ),
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
-                [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
+                [
+                    ['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com'],
+                    ['id' => '2', 'name' => 'Bob',   'email' => 'bob@example.com'],
+                ],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
             ),
-            'canvas.example.com/api/v1/courses/24/users*' => Http::response(
-                [['id' => '2', 'name' => 'Bob', 'email' => 'bob@example.com']],
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
+            ),
+            'canvas.example.com/api/v1/courses/24/enrollments*' => Http::response(
+                [['id' => '101', 'user_id' => '2', 'type' => 'StudentEnrollment']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/24/enrollments')]
             ),
         ]);
 
@@ -261,8 +293,9 @@ class CourseUserCollectorTest extends TestCase
 
         $this->assertCount(2, $users);
         Http::assertSent(fn (Request $r) => str_contains($r->url(), 'accounts/1/courses'));
-        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/23/users'));
-        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/24/users'));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'accounts/1/users'));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/23/enrollments'));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'courses/24/enrollments'));
     }
 
     public function test_for_account_defaults_to_config_account_id(): void
@@ -283,17 +316,22 @@ class CourseUserCollectorTest extends TestCase
     public function test_explicit_courses_override_for_account(): void
     {
         Http::fake([
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [['id' => '1', 'name' => 'Alice', 'email' => 'alice@example.com']],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [['id' => '100', 'user_id' => '1', 'type' => 'StudentEnrollment']],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
             ),
         ]);
 
         $users = Canvas::courseUserList()->forAccount(1)->courses([23])->get();
 
         $this->assertCount(1, $users);
-        Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'accounts/'));
+        Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'accounts/1/courses'));
     }
 
     public function test_for_account_records_error_when_account_fetch_fails(): void
@@ -313,21 +351,29 @@ class CourseUserCollectorTest extends TestCase
         $this->assertStringContainsString('500', $collector->getErrors()['_account']);
     }
 
-    public function test_without_enrollment_filter_does_not_send_enrollment_type(): void
+    public function test_without_enrollment_filter_does_not_send_type(): void
     {
         Http::fake([
-            'canvas.example.com/api/v1/courses/23/users*' => Http::response(
+            'canvas.example.com/api/v1/accounts/1/users*' => Http::response(
                 [],
                 200,
-                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/users')]
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/users')]
+            ),
+            'canvas.example.com/api/v1/courses/23/enrollments*' => Http::response(
+                [],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/courses/23/enrollments')]
             ),
         ]);
 
         Canvas::courseUserList()->courses([23])->get();
 
         Http::assertSent(function (Request $request) {
+            if (!str_contains($request->url(), 'enrollments')) {
+                return true; // skip non-enrollment requests
+            }
             $url = urldecode($request->url());
-            return !str_contains($url, 'enrollment_type');
+            return !str_contains($url, 'type[]=');
         });
     }
 }

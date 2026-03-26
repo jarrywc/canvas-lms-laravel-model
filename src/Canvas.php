@@ -20,6 +20,7 @@ use JarredCain\CanvasLms\Models\User;
 use JarredCain\CanvasLms\Query\Builder;
 use JarredCain\CanvasLms\Sis\SisImporter;
 use JarredCain\CanvasLms\Users\UserEmailLookup;
+use JarredCain\CanvasLms\Utilities\AccountUserReport;
 use JarredCain\CanvasLms\Utilities\CourseUserCollector;
 
 class Canvas
@@ -231,15 +232,38 @@ class Canvas
     // -------------------------------------------------------------------------
 
     /**
-     * Return a fluent collector for unique users (id + email) across multiple courses.
+     * Return a fluent collector for unique users (id + name + email) across multiple courses.
+     * Defaults to the configured account so course discovery works without enrollment.
      *
      * Usage:
-     *   Canvas::courseUserList()->courses([23, 24, 25])->get();
-     *   Canvas::courseUserList()->courseRange(23, 25)->get();
+     *   Canvas::courseUserList()->get();                          // all users in default account
+     *   Canvas::courseUserList(5)->studentsOnly()->get();         // explicit account
+     *   Canvas::courseUserList()->courses([23, 24])->get();       // explicit courses override account
+     *
+     * @param int|string|null $accountId  Override the configured account ID
      */
-    public function courseUserList(): CourseUserCollector
+    public function courseUserList(int|string|null $accountId = null): CourseUserCollector
     {
-        return new CourseUserCollector($this->client);
+        $id = $accountId ?? config('canvas.account_id', 1);
+
+        return (new CourseUserCollector($this->client))->forAccount($id);
+    }
+
+    /**
+     * Return a fluent report builder for users organized by course (cohort).
+     * Defaults to the configured account.
+     *
+     * Usage:
+     *   Canvas::accountUserReport()->studentsOnly()->toCsv();
+     *   Canvas::accountUserReport(5)->toFile('/tmp/report.csv');
+     *
+     * @param int|string|null $accountId  Override the configured account ID
+     */
+    public function accountUserReport(int|string|null $accountId = null): AccountUserReport
+    {
+        $id = $accountId ?? config('canvas.account_id', 1);
+
+        return (new AccountUserReport($this->client))->forAccount($id);
     }
 
     // -------------------------------------------------------------------------

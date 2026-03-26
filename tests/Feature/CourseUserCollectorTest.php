@@ -138,14 +138,19 @@ class CourseUserCollectorTest extends TestCase
         });
     }
 
-    public function test_returns_empty_collection_when_no_courses_set(): void
+    public function test_returns_empty_collection_when_account_has_no_courses(): void
     {
-        Http::fake();
+        Http::fake([
+            'canvas.example.com/api/v1/accounts/1/courses*' => Http::response(
+                [],
+                200,
+                ['Link' => $this->noNextLink('https://canvas.example.com/api/v1/accounts/1/courses')]
+            ),
+        ]);
 
         $users = Canvas::courseUserList()->get();
 
         $this->assertCount(0, $users);
-        Http::assertNothingSent();
     }
 
     public function test_each_result_has_id_name_and_email_keys(): void

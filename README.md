@@ -231,6 +231,29 @@ foreach ($users as $user) {
 
 Each result contains `id`, `name`, and `email`. Users enrolled in multiple courses appear once. Requires an account-level token with permission to read course rosters.
 
+### Account User Report (by Cohort)
+
+`accountUserReport()` generates a user list organized by course — users enrolled in multiple courses appear once per course. Results can be exported directly to CSV.
+
+```php
+// All students across an account, grouped by course, as CSV
+$csv = Canvas::accountUserReport()->forAccount()->studentsOnly()->toCsv();
+
+// Write to file
+Canvas::accountUserReport()->forAccount(5)->studentsOnly()->toFile('/tmp/students.csv');
+
+// Specific courses
+Canvas::accountUserReport()->courses([23, 24])->toFile('/tmp/report.csv');
+
+// Get as a Collection
+$rows = Canvas::accountUserReport()->forAccount()->studentsOnly()->get();
+foreach ($rows as $row) {
+    echo "{$row['course_name']}: {$row['user_name']} ({$row['user_email']})";
+}
+```
+
+CSV columns: `course_id`, `course_name`, `user_id`, `user_name`, `user_email`
+
 ### CRUD Operations
 
 ```php

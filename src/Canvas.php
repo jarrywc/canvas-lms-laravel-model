@@ -22,6 +22,7 @@ use JarredCain\CanvasLms\Sis\SisImporter;
 use JarredCain\CanvasLms\Users\UserEmailLookup;
 use JarredCain\CanvasLms\Utilities\AccountUserReport;
 use JarredCain\CanvasLms\Utilities\CourseUserCollector;
+use JarredCain\CanvasLms\Utilities\UnenrolledUserCollector;
 
 class Canvas
 {
@@ -264,6 +265,24 @@ class Canvas
         $id = $accountId ?? config('canvas.account_id', 1);
 
         return (new AccountUserReport($this->client))->forAccount($id);
+    }
+
+    /**
+     * Return a fluent collector for users NOT enrolled in any course.
+     * Defaults to the configured account.
+     *
+     * Usage:
+     *   Canvas::unenrolledUsers()->get();
+     *   Canvas::unenrolledUsers()->studentsOnly()->toCsv();
+     *   Canvas::unenrolledUsers(5)->courses([23, 24])->toResponse('unenrolled.csv');
+     *
+     * @param int|string|null $accountId  Override the configured account ID
+     */
+    public function unenrolledUsers(int|string|null $accountId = null): UnenrolledUserCollector
+    {
+        $id = $accountId ?? config('canvas.account_id', 1);
+
+        return (new UnenrolledUserCollector($this->client))->forAccount($id);
     }
 
     // -------------------------------------------------------------------------

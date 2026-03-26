@@ -101,7 +101,9 @@ class CanvasClient
         $pending = $this->buildRequest();
 
         $httpResponse = match ($method) {
-            'get'    => $pending->get($url, $options['query'] ?? []),
+            'get'    => empty($options['query'] ?? [])
+                            ? $pending->get($url)
+                            : $pending->get($url, $options['query']),
             'post'   => $pending->post($url, $options['json'] ?? []),
             'put'    => $pending->put($url, $options['json'] ?? []),
             'delete' => $pending->delete($url),

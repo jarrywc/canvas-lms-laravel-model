@@ -90,7 +90,7 @@ class PaginatedResponseTest extends TestCase
 
         $client = Mockery::mock(CanvasClient::class);
         // Verify that the EXACT opaque URL is used — not a reconstructed one
-        $client->shouldReceive('getUrl')->with($nextUrl, [])->once()->andReturn($nextResponse);
+        $client->shouldReceive('getUrl')->with($nextUrl)->once()->andReturn($nextResponse);
 
         $response = new PaginatedResponse(
             [new Course(['id' => '1'])],
@@ -123,6 +123,25 @@ class PaginatedResponseTest extends TestCase
         $this->assertCount(2, $paginated);
         $this->assertInstanceOf(Course::class, $paginated->first());
         $this->assertSame('Biology', $paginated->first()->name);
+    }
+
+    public function test_next_returns_null_when_cycle_detected(): void
+    {
+        $nextUrl    = 'https://canvas.example.com/api/v1/courses?page=2';
+        $linkHeader = "<{$nextUrl}>; rel=\"next\"";
+        $client     = Mockery::mock(CanvasClient::class);
+
+        // The nextUrl is already in visitedUrls — should short-circuit
+        $response = new PaginatedResponse(
+            [new Course(['id' => '1'])],
+            Course::class,
+            $client,
+            $linkHeader,
+            [$nextUrl => true]
+        );
+
+        $this->assertTrue($response->hasNextPage());
+        $this->assertNull($response->next());
     }
 
     protected function tearDown(): void

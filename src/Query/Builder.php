@@ -416,6 +416,12 @@ class Builder
     {
         $params = $this->parameters;
 
+        // Canvas defaults to 10 per page; always request the maximum (100)
+        // unless the caller explicitly set a different value.
+        if (!isset($params['per_page'])) {
+            $params['per_page'] = 100;
+        }
+
         if (!empty($this->includes)) {
             $params['include'] = $this->includes;
         }

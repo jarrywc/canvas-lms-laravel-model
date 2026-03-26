@@ -15,19 +15,25 @@ class PaginatedResponse implements Countable, IteratorAggregate
     private ?string $firstUrl = null;
     private ?string $lastUrl = null;
 
+    /** @var array<string, true> URLs already fetched in this pagination sequence */
+    private array $visitedUrls = [];
+
     public function __construct(
         private array $items,
         private string $modelClass,
         private CanvasClient $client,
-        string $linkHeader = ''
+        string $linkHeader = '',
+        array $visitedUrls = []
     ) {
+        $this->visitedUrls = $visitedUrls;
         $this->parseLinkHeader($linkHeader);
     }
 
     public static function fromResponse(
         Response $response,
         string $modelClass,
-        CanvasClient $client
+        CanvasClient $client,
+        array $visitedUrls = []
     ): static {
         $data = $response->json();
 
@@ -45,7 +51,8 @@ class PaginatedResponse implements Countable, IteratorAggregate
             $items,
             $modelClass,
             $client,
-            $response->header('Link') ?: $response->header('link')
+            $response->header('Link') ?: $response->header('link'),
+            $visitedUrls
         );
     }
 
@@ -75,10 +82,18 @@ class PaginatedResponse implements Countable, IteratorAggregate
             return null;
         }
 
+        // Guard against infinite pagination loops (e.g., same URL returned twice)
+        if (isset($this->visitedUrls[$this->nextUrl])) {
+            return null;
+        }
+
+        $visited = $this->visitedUrls;
+        $visited[$this->nextUrl] = true;
+
         // Use the opaque URL directly — never reconstruct Canvas pagination URLs
         $response = $this->client->getUrl($this->nextUrl);
 
-        return static::fromResponse($response, $this->modelClass, $this->client);
+        return static::fromResponse($response, $this->modelClass, $this->client, $visited);
     }
 
     public function prev(): ?static

@@ -14,7 +14,7 @@ class BuilderParametersTest extends TestCase
         $builder = new Builder(Course::class);
         $builder->where('workflow_state', 'available');
 
-        $this->assertSame(['workflow_state' => 'available'], $builder->buildQueryParameters());
+        $this->assertSame(['workflow_state' => 'available', 'per_page' => 100], $builder->buildQueryParameters());
     }
 
     public function test_where_in_adds_array_parameter(): void
@@ -49,7 +49,7 @@ class BuilderParametersTest extends TestCase
         $builder = new Builder(Course::class);
         $builder->search('biology');
 
-        $this->assertSame(['search_term' => 'biology'], $builder->buildQueryParameters());
+        $this->assertSame(['search_term' => 'biology', 'per_page' => 100], $builder->buildQueryParameters());
     }
 
     public function test_per_page_sets_per_page_parameter(): void
@@ -82,6 +82,6 @@ class BuilderParametersTest extends TestCase
     {
         $builder = new Builder(Course::class);
 
-        $this->assertSame([], $builder->buildQueryParameters());
+        $this->assertSame(['per_page' => 100], $builder->buildQueryParameters());
     }
 }
